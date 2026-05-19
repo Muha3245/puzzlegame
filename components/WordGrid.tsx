@@ -169,13 +169,36 @@ export function WordGrid({
 
     const fixed = normalizeLine(start, end);
 
+    const sameExactPoint = (a: Point, b: Point) => {
+      return a[0] === b[0] && a[1] === b[1];
+    };
+
     const selectedWord = lettersBetween(fixed.start, fixed.end);
     const reversedWord = selectedWord.split('').reverse().join('');
+
+    /*
+      This checks the actual puzzle placements first.
+      It means the player can find ANY word in ANY order.
+      Example: if the list has 5 words, the user can match word 3 first,
+      then word 1, then word 5. It does not force sequential matching.
+    */
+    const placementMatch = puzzle.placements.find((placement) => {
+      const sameDirection =
+        sameExactPoint(placement.start, fixed.start) &&
+        sameExactPoint(placement.end, fixed.end);
+
+      const reverseDirection =
+        sameExactPoint(placement.start, fixed.end) &&
+        sameExactPoint(placement.end, fixed.start);
+
+      return sameDirection || reverseDirection;
+    });
 
     const directMatch = safeWords.find((word) => word === selectedWord);
     const reverseMatch = safeWords.find((word) => word === reversedWord);
 
-    const matchedWord = directMatch || reverseMatch;
+    const matchedWord =
+      placementMatch?.word?.toUpperCase().trim() || directMatch || reverseMatch;
 
     if (matchedWord) {
       const alreadyFound = foundRef.current.some(
@@ -186,10 +209,21 @@ export function WordGrid({
         const color =
           STRIPE_COLORS[foundRef.current.length % STRIPE_COLORS.length];
 
+        const reverseMatchFromPlacement =
+          !!placementMatch &&
+          sameExactPoint(placementMatch.start, fixed.end) &&
+          sameExactPoint(placementMatch.end, fixed.start);
+
         onFoundRef.current({
           word: matchedWord,
-          start: reverseMatch ? fixed.end : fixed.start,
-          end: reverseMatch ? fixed.start : fixed.end,
+          start:
+            reverseMatch || reverseMatchFromPlacement
+              ? fixed.end
+              : fixed.start,
+          end:
+            reverseMatch || reverseMatchFromPlacement
+              ? fixed.start
+              : fixed.end,
           color,
         });
       }

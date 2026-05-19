@@ -947,9 +947,25 @@ export default function Levels() {
 
         {!selectedCategory ? (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+            <View style={styles.topActions}>
+              <Pressable onPress={() => router.push('/leaderboard')} style={styles.topActionBtn}>
+                <Text style={styles.topActionIcon}>🏆</Text>
+              </Pressable>
+
+              <Pressable onPress={() => router.push('/friends')} style={styles.topActionBtn}>
+                <Text style={styles.topActionIcon}>👥</Text>
+              </Pressable>
+
+              <Pressable onPress={() => router.push('/login')} style={styles.topActionBtn}>
+                <Text style={styles.topActionIcon}>👤</Text>
+              </Pressable>
+            </View>
+
             <View style={styles.titlePill}>
               <Text style={styles.titleText}>EXPLORE MANY THEMES</Text>
-              <Text style={styles.titleSubText}>{DIFFICULTIES[difficulty].label} has its own category set</Text>
+              <Text style={styles.titleSubText}>
+                {DIFFICULTIES[difficulty].label} has its own category set
+              </Text>
             </View>
 
             <DifficultyTabs active={difficulty} onChange={onDifficultyChange} />
@@ -988,6 +1004,16 @@ export default function Levels() {
                 <Text style={styles.levelHeaderSub}>
                   {DIFFICULTIES[difficulty].label} levels with growing grids
                 </Text>
+              </View>
+
+              <View style={styles.headerActions}>
+                <Pressable onPress={() => router.push('/leaderboard')} style={styles.headerActionBtn}>
+                  <Text style={styles.headerActionIcon}>🏆</Text>
+                </Pressable>
+
+                <Pressable onPress={() => router.push('/friends')} style={styles.headerActionBtn}>
+                  <Text style={styles.headerActionIcon}>👥</Text>
+                </Pressable>
               </View>
             </View>
 
@@ -1062,6 +1088,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 28,
+  },
+  topActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  topActionBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff4d8',
+    borderWidth: 1.5,
+    borderColor: '#d8cba9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 5 },
+    shadowRadius: 7,
+    elevation: 6,
+  },
+  topActionIcon: {
+    fontSize: 22,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerActionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ff7a00',
+    borderWidth: 1.5,
+    borderColor: '#fff4b8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  headerActionIcon: {
+    fontSize: 18,
   },
   titlePill: {
     borderRadius: 999,

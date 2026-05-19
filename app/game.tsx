@@ -16,6 +16,7 @@ import { FoundEntry, WordGrid } from '../components/WordGrid';
 import { CATEGORIES, STRIPE_COLORS } from '../constants/categories';
 import { buildPuzzle } from '../lib/puzzle';
 import { useAppState } from '../lib/storage';
+import { completeOnlineLevel } from '../lib/online';
 
 const PRAISE = ['AMAZING', 'NICE', 'GOOD', 'WOW', 'BRILLIANT'];
 const LEVELS_PER_CATEGORY = 8;
@@ -98,6 +99,13 @@ export default function Game() {
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
   const [won, setWon] = useState(false);
   const [rewardCoins, setRewardCoins] = useState(0);
+  const [rewardOptions, setRewardOptions] = useState<number[]>([]);
+  const [selectedRewardIndex, setSelectedRewardIndex] = useState<number | null>(null);
+  const [canContinue, setCanContinue] = useState(false);
+
+  const boxOneAnim = useRef(new Animated.Value(0)).current;
+  const boxTwoAnim = useRef(new Animated.Value(0)).current;
+  const boxThreeAnim = useRef(new Animated.Value(0)).current;
 
   const pulse = useRef(new Animated.Value(0)).current;
 
@@ -107,6 +115,9 @@ export default function Game() {
     setBanner(null);
     setWon(false);
     setRewardCoins(0);
+    setRewardOptions([]);
+    setSelectedRewardIndex(null);
+    setCanContinue(false);
   }, [category.id, difficulty, levelNumber]);
 
   useEffect(() => {
@@ -136,11 +147,98 @@ export default function Game() {
     outputRange: [1, 1.05],
   });
 
-  const getRewardForLevel = () => {
-    if (difficulty === 'easy') return 25;
-    if (difficulty === 'medium') return levelNumber % 3 === 0 ? 60 : levelNumber % 2 === 0 ? 40 : 0;
-    if (difficulty === 'hard') return levelNumber % 2 === 0 ? 75 : 0;
-    return levelNumber % 2 === 1 ? 100 : 0;
+  const getRewardBaseForLevel = () => {
+    if (difficulty === 'easy') return 25 + levelNumber * 5;
+    if (difficulty === 'medium') {
+      if (levelNumber % 3 === 0) return 70;
+      if (levelNumber % 2 === 0) return 45;
+      return 0;
+    }
+    if (difficulty === 'hard') return levelNumber % 2 === 0 ? 90 : 0;
+    return levelNumber % 2 === 1 ? 120 : 80;
+  };
+
+  const makeRewardOptions = () => {
+    const base = getRewardBaseForLevel();
+
+    if (base <= 0) {
+      return [];
+    }
+
+    return [base, base + 15, base + 30].sort(() => Math.random() - 0.5);
+  };
+
+  const startRewardShuffle = () => {
+    boxOneAnim.setValue(0);
+    boxTwoAnim.setValue(0);
+    boxThreeAnim.setValue(0);
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(boxOneAnim, {
+            toValue: 1,
+            duration: 260,
+            useNativeDriver: true,
+          }),
+          Animated.timing(boxTwoAnim, {
+            toValue: 1,
+            duration: 260,
+            useNativeDriver: true,
+          }),
+          Animated.timing(boxThreeAnim, {
+            toValue: 1,
+            duration: 260,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(boxOneAnim, {
+            toValue: 0,
+            duration: 260,
+            useNativeDriver: true,
+          }),
+          Animated.timing(boxTwoAnim, {
+            toValue: 0,
+            duration: 260,
+            useNativeDriver: true,
+          }),
+          Animated.timing(boxThreeAnim, {
+            toValue: 0,
+            duration: 260,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+      { iterations: 4 }
+    ).start();
+  };
+
+  const pickRewardBox = (index: number) => {
+    if (selectedRewardIndex !== null) return;
+
+    const reward = rewardOptions[index] ?? 0;
+
+    setSelectedRewardIndex(index);
+    setRewardCoins(reward);
+
+    if (reward > 0) {
+      addCoins(reward);
+    }
+
+    completeOnlineLevel({
+      categoryKey,
+      difficulty,
+      level: levelNumber,
+      foundWords: levelWords.length,
+      rewardCoins: reward,
+    }).catch(() => {
+      // Keep local game working even if internet is off.
+    });
+
+    setTimeout(() => {
+      setCanContinue(true);
+    }, 450);
   };
 
   const onFound = (entry: FoundEntry) => {
@@ -160,14 +258,32 @@ export default function Game() {
       setWordsFound(progressKey, newFound.length);
 
       if (newFound.length === levelWords.length) {
-        const reward = getRewardForLevel();
-        setRewardCoins(reward);
+        const options = makeRewardOptions();
 
-        if (reward > 0) {
-          addCoins(reward);
+        setRewardOptions(options);
+        setSelectedRewardIndex(null);
+        setRewardCoins(0);
+        setCanContinue(options.length === 0);
+
+        if (options.length === 0) {
+          completeOnlineLevel({
+            categoryKey,
+            difficulty,
+            level: levelNumber,
+            foundWords: newFound.length,
+            rewardCoins: 0,
+          }).catch(() => {
+            // Keep local game working even if internet is off.
+          });
         }
 
-        setTimeout(() => setWon(true), 650);
+        setTimeout(() => {
+          setWon(true);
+
+          if (options.length > 0) {
+            setTimeout(startRewardShuffle, 180);
+          }
+        }, 650);
       }
 
       return newFound;
@@ -310,26 +426,104 @@ export default function Game() {
 
         {won && (
           <View style={styles.winOverlay}>
-            <View style={styles.winCard}>
+            <View style={styles.rewardModal}>
               <Text style={styles.winEmoji}>🏆</Text>
               <Text style={styles.winTitle}>Level Complete!</Text>
               <Text style={styles.winText}>
                 You cleared {displayTitle} • {difficultyConfig.label} • Level {levelNumber}.
               </Text>
-              <View style={styles.rewardChest}>
-                <Text style={styles.rewardChestIcon}>{rewardCoins > 0 ? '🎁' : '⭐'}</Text>
-              </View>
 
-              <View style={styles.winRewardPill}>
-                <Text style={styles.winRewardText}>
-                  {rewardCoins > 0 ? `+${rewardCoins} coins earned` : 'Level unlocked'}
-                </Text>
-              </View>
-              <Pressable style={styles.winPrimaryBtn} onPress={goNext}>
+              {rewardOptions.length > 0 ? (
+                <>
+                  <Text style={styles.rewardPickTitle}>Pick one reward box</Text>
+                  <Text style={styles.rewardPickSub}>Boxes shuffle first. Tap any box to claim your prize.</Text>
+
+                  <View style={styles.rewardBoxesRow}>
+                    {rewardOptions.map((reward, index) => {
+                      const anim =
+                        index === 0 ? boxOneAnim : index === 1 ? boxTwoAnim : boxThreeAnim;
+
+                      const translateX = anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange:
+                          index === 0 ? [0, 18] : index === 1 ? [0, -18] : [0, 12],
+                      });
+
+                      const translateY = anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: index === 1 ? [0, 10] : [0, -10],
+                      });
+
+                      const rotate = anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: index === 1 ? ['0deg', '-6deg'] : ['0deg', '6deg'],
+                      });
+
+                      const selected = selectedRewardIndex === index;
+                      const opened = selectedRewardIndex !== null;
+
+                      return (
+                        <Animated.View
+                          key={`reward-${index}`}
+                          style={{
+                            transform: [
+                              { translateX: selectedRewardIndex === null ? translateX : 0 },
+                              { translateY: selectedRewardIndex === null ? translateY : 0 },
+                              { rotate: selectedRewardIndex === null ? rotate : '0deg' },
+                              { scale: selected ? 1.08 : 1 },
+                            ],
+                          }}
+                        >
+                          <Pressable
+                            disabled={selectedRewardIndex !== null}
+                            onPress={() => pickRewardBox(index)}
+                            style={[styles.rewardBox, selected && styles.rewardBoxSelected]}
+                          >
+                            <Text style={styles.rewardBoxIcon}>{opened ? '🎁' : '❓'}</Text>
+                            <Text style={styles.rewardBoxText}>
+                              {opened ? `+${reward}` : 'BOX'}
+                            </Text>
+                            <Text style={styles.rewardCoinText}>
+                              {opened ? 'coins' : 'tap'}
+                            </Text>
+                          </Pressable>
+                        </Animated.View>
+                      );
+                    })}
+                  </View>
+
+                  {selectedRewardIndex !== null ? (
+                    <View style={styles.winRewardPill}>
+                      <Text style={styles.winRewardText}>+{rewardCoins} coins earned</Text>
+                    </View>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <View style={styles.rewardChest}>
+                    <Text style={styles.rewardChestIcon}>⭐</Text>
+                  </View>
+
+                  <View style={styles.winRewardPill}>
+                    <Text style={styles.winRewardText}>Level unlocked</Text>
+                  </View>
+                </>
+              )}
+
+              <Pressable
+                disabled={!canContinue}
+                style={[styles.winPrimaryBtn, !canContinue && styles.winPrimaryBtnDisabled]}
+                onPress={goNext}
+              >
                 <Text style={styles.winPrimaryBtnText}>
-                  {levelNumber < LEVELS_PER_CATEGORY ? 'Next Level' : 'Back to Levels'}
+                  {canContinue
+                    ? levelNumber < LEVELS_PER_CATEGORY
+                      ? 'Next Level'
+                      : 'Back to Levels'
+                    : 'Choose a Box'}
                 </Text>
               </Pressable>
+
               <Pressable
                 style={styles.winSecondaryBtn}
                 onPress={() => router.replace(`/levels?category=${categoryKey}&difficulty=${difficulty}`)}
@@ -603,7 +797,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
-  winCard: {
+  rewardModal: {
     width: '100%',
     maxWidth: 360,
     backgroundColor: 'rgba(255,255,255,0.92)',
@@ -614,6 +808,60 @@ const styles = StyleSheet.create({
   winEmoji: { fontSize: 50 },
   winTitle: { marginTop: 10, color: '#28145C', fontWeight: '900', fontSize: 24 },
   winText: { marginTop: 8, textAlign: 'center', color: '#6A608F', lineHeight: 20 },
+  rewardPickTitle: {
+    marginTop: 10,
+    color: '#28145C',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  rewardPickSub: {
+    marginTop: 4,
+    color: '#6A608F',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  rewardBoxesRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  rewardBox: {
+    width: 86,
+    height: 110,
+    borderRadius: 24,
+    backgroundColor: '#FF8A00',
+    borderWidth: 4,
+    borderColor: '#FFE7A8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  rewardBoxSelected: {
+    backgroundColor: '#21C76A',
+    borderColor: '#D8FFE4',
+  },
+  rewardBoxIcon: {
+    fontSize: 32,
+  },
+  rewardBoxText: {
+    marginTop: 8,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  rewardCoinText: {
+    marginTop: 2,
+    color: '#FFF3C4',
+    fontSize: 10,
+    fontWeight: '900',
+  },
   rewardChest: {
     marginTop: 14,
     width: 86,
@@ -648,6 +896,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
+  },
+  winPrimaryBtnDisabled: {
+    opacity: 0.55,
   },
   winPrimaryBtnText: { color: '#fff', fontWeight: '900', fontSize: 16 },
   winSecondaryBtn: {
