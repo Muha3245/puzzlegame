@@ -41,7 +41,14 @@ export function buildPuzzle(words: string[], size = 10, seedStr = 'seed'): Puzzl
   const rng = mulberry32(strHash(seedStr));
   const grid: (string | null)[][] = Array.from({ length: size }, () => Array(size).fill(null));
   const placements: Placement[] = [];
-  const ordered = [...words].sort((a, b) => b.length - a.length);
+  const uniqueWords = Array.from(
+    new Set(
+      words
+        .map((word) => word.toUpperCase().trim())
+        .filter((word) => word.length > 1 && word.length <= size)
+    )
+  );
+  const ordered = [...uniqueWords].sort((a, b) => b.length - a.length);
 
   for (const word of ordered) {
     let placed = false;

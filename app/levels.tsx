@@ -11,7 +11,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Ellipse, Line, Path, Polygon, Rect } from 'react-native-svg';
 import { CATEGORIES } from '../constants/categories';
 import { useAppState } from '../lib/storage';
@@ -811,7 +811,7 @@ function FloatingCategoryCard({
       >
         <View style={styles.progressTop}>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: progressWidth }]} />
+            <View style={[styles.progressFill, { width: progressWidth as any }]} />
           </View>
           <View style={styles.progressBadge}>
             <Text style={styles.progressBadgeText}>{completedCount}/{LEVELS_PER_CATEGORY}</Text>
@@ -873,6 +873,7 @@ export default function Levels() {
   const params = useLocalSearchParams<{ category?: string; difficulty?: string }>();
   const { state } = useAppState();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [difficulty, setDifficulty] = useState<DifficultyId>(getDifficulty(params.difficulty));
 
@@ -893,7 +894,9 @@ export default function Levels() {
 
   const columns = width >= 500 ? 3 : 2;
   const gap = 14;
-  const cardWidth = (width - 32 - gap * (columns - 1)) / columns;
+  const horizontalPadding = 16;
+  const usableWidth = width - insets.left - insets.right;
+  const cardWidth = (usableWidth - horizontalPadding * 2 - gap * (columns - 1)) / columns;
 
   const isCompleted = (categoryId: string, wordsLength: number, level: number) => {
     const found = state.progress[makeProgressKey(categoryId, difficulty, level)] ?? 0;
@@ -942,23 +945,47 @@ export default function Levels() {
   return (
     <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
       <View style={styles.overlay} />
-      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.safeArea}>
         <StatusBar barStyle="dark-content" />
 
         {!selectedCategory ? (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.content,
+              {
+                paddingLeft: Math.max(16, insets.left + 16),
+                paddingRight: Math.max(16, insets.right + 16),
+              },
+            ]}
+          >
             <View style={styles.topActions}>
-              <Pressable onPress={() => router.push('/leaderboard')} style={styles.topActionBtn}>
-                <Text style={styles.topActionIcon}>🏆</Text>
+              <Pressable onPress={() => router.push('/shop')} style={styles.coinPill}>
+                <Text style={styles.coinIcon}>🪙</Text>
+                <Text style={styles.coinText}>{state.coins}</Text>
               </Pressable>
 
-              <Pressable onPress={() => router.push('/friends')} style={styles.topActionBtn}>
-                <Text style={styles.topActionIcon}>👥</Text>
-              </Pressable>
+              <View style={styles.topActionGroup}>
+                <Pressable onPress={() => router.push('/settings')} style={styles.topActionBtn}>
+                  <Text style={styles.topActionIcon}>⚙️</Text>
+                </Pressable>
 
-              <Pressable onPress={() => router.push('/login')} style={styles.topActionBtn}>
-                <Text style={styles.topActionIcon}>👤</Text>
-              </Pressable>
+                <Pressable onPress={() => router.push('/leaderboard')} style={styles.topActionBtn}>
+                  <Text style={styles.topActionIcon}>🏆</Text>
+                </Pressable>
+
+                <Pressable onPress={() => router.push('/friends')} style={styles.topActionBtn}>
+                  <Text style={styles.topActionIcon}>👥</Text>
+                </Pressable>
+
+                <Pressable onPress={() => router.push('/battle')} style={styles.topActionBtn}>
+                  <Text style={styles.topActionIcon}>⚔️</Text>
+                </Pressable>
+
+                <Pressable onPress={() => router.push('/profile')} style={styles.topActionBtn}>
+                  <Text style={styles.topActionIcon}>👤</Text>
+                </Pressable>
+              </View>
             </View>
 
             <View style={styles.titlePill}>
@@ -989,14 +1016,23 @@ export default function Levels() {
             </View>
           </ScrollView>
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.content,
+              {
+                paddingLeft: Math.max(16, insets.left + 16),
+                paddingRight: Math.max(16, insets.right + 16),
+              },
+            ]}
+          >
             <View style={styles.levelHeader}>
               <Pressable onPress={backToCategories} style={styles.backBtn}>
                 <Text style={styles.backText}>‹</Text>
               </Pressable>
 
               <View style={styles.levelHeaderIcon}>
-                <CategorySvgIcon name={selectedCategory.name} size={62} />
+                <CategorySvgIcon name={selectedCategory.name} size={48} />
               </View>
 
               <View style={styles.levelHeaderText}>
@@ -1007,12 +1043,17 @@ export default function Levels() {
               </View>
 
               <View style={styles.headerActions}>
-                <Pressable onPress={() => router.push('/leaderboard')} style={styles.headerActionBtn}>
-                  <Text style={styles.headerActionIcon}>🏆</Text>
+                <Pressable onPress={() => router.push('/shop')} style={styles.headerCoinPill}>
+                  <Text style={styles.headerCoinIcon}>🪙</Text>
+                  <Text style={styles.headerCoinText}>{state.coins}</Text>
                 </Pressable>
 
-                <Pressable onPress={() => router.push('/friends')} style={styles.headerActionBtn}>
-                  <Text style={styles.headerActionIcon}>👥</Text>
+                <Pressable onPress={() => router.push('/settings')} style={styles.headerActionBtn}>
+                  <Text style={styles.headerActionIcon}>⚙️</Text>
+                </Pressable>
+
+                <Pressable onPress={() => router.push('/battle')} style={styles.headerActionBtn}>
+                  <Text style={styles.headerActionIcon}>⚔️</Text>
                 </Pressable>
               </View>
             </View>
@@ -1057,10 +1098,29 @@ export default function Levels() {
                     <Text style={styles.levelCardMeta}>Grid {grid}×{grid} • {need} words</Text>
 
                     <View style={styles.levelProgressTrack}>
-                      <View style={[styles.levelProgressFill, { width: progressWidth }]} />
+                      <View style={[styles.levelProgressFill, { width: progressWidth as any }]} />
                     </View>
 
                     <Text style={styles.levelFoundText}>{Math.min(found, need)}/{need} found</Text>
+
+                    {unlocked && (
+                      <View style={styles.levelActionRow}>
+                        <View style={styles.levelMiniBtn}>
+                          <Text style={styles.levelMiniBtnText}>PLAY</Text>
+                        </View>
+                        <Pressable
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            router.push(
+                              `/battle?id=${selectedCategory.baseId}&categoryKey=${selectedCategory.id}&title=${encodeURIComponent(selectedCategory.name)}&difficulty=${difficulty}&level=${level}`
+                            );
+                          }}
+                          style={[styles.levelMiniBtn, styles.levelBattleBtn]}
+                        >
+                          <Text style={styles.levelMiniBtnText}>⚔️ BATTLE</Text>
+                        </Pressable>
+                      </View>
+                    )}
                   </Pressable>
                 );
               })}
@@ -1085,21 +1145,58 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 28,
+    paddingTop: 10,
+    paddingBottom: 34,
   },
   topActions: {
+    width: '100%',
+    maxWidth: '100%',
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
     marginBottom: 12,
+    flexWrap: 'nowrap',
+  },
+  topActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 5,
+    flexShrink: 1,
+  },
+  coinPill: {
+    minWidth: 68,
+    maxWidth: 90,
+    height: 38,
+    borderRadius: 19,
+    paddingHorizontal: 8,
+    backgroundColor: '#fff4d8',
+    borderWidth: 1.5,
+    borderColor: '#d8cba9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 5 },
+    shadowRadius: 7,
+    elevation: 6,
+    flexShrink: 0,
+  },
+  coinIcon: {
+    fontSize: 17,
+  },
+  coinText: {
+    color: '#9c096d',
+    fontSize: 13,
+    fontWeight: '900',
   },
   topActionBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#fff4d8',
     borderWidth: 1.5,
     borderColor: '#d8cba9',
@@ -1110,18 +1207,48 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     shadowRadius: 7,
     elevation: 6,
+    flexShrink: 0,
   },
   topActionIcon: {
-    fontSize: 22,
+    fontSize: 18,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+  },
+  headerCoinPill: {
+    minWidth: 58,
+    maxWidth: 76,
+    height: 34,
+    borderRadius: 17,
+    paddingHorizontal: 7,
+    backgroundColor: '#fff4d8',
+    borderWidth: 1.5,
+    borderColor: '#fff4b8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  headerCoinIcon: {
+    fontSize: 13,
+  },
+  headerCoinText: {
+    color: '#9c096d',
+    fontSize: 12,
+    fontWeight: '900',
   },
   headerActionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: '#ff7a00',
     borderWidth: 1.5,
     borderColor: '#fff4b8',
@@ -1134,7 +1261,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   headerActionIcon: {
-    fontSize: 18,
+    fontSize: 16,
   },
   titlePill: {
     borderRadius: 999,
@@ -1291,27 +1418,30 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   levelHeader: {
-    minHeight: 100,
-    borderRadius: 24,
+    width: '100%',
+    maxWidth: '100%',
+    minHeight: 88,
+    borderRadius: 22,
     backgroundColor: 'rgba(255,244,216,0.98)',
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.88)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
     marginBottom: 16,
-    gap: 12,
+    gap: 8,
     shadowColor: '#000',
     shadowOpacity: 0.18,
     shadowOffset: { width: 0, height: 6 },
     shadowRadius: 8,
     elevation: 7,
+    overflow: 'hidden',
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#ff7a00',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1320,6 +1450,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 6,
     elevation: 5,
+    flexShrink: 0,
   },
   backText: {
     color: '#fff',
@@ -1328,25 +1459,27 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   levelHeaderIcon: {
-    width: 74,
-    height: 74,
-    borderRadius: 18,
+    width: 54,
+    height: 54,
+    borderRadius: 15,
     backgroundColor: '#fff9e9',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   levelHeaderText: {
     flex: 1,
+    minWidth: 0,
   },
   levelHeaderTitle: {
     color: '#2e2f3d',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
   },
   levelHeaderSub: {
-    marginTop: 4,
+    marginTop: 3,
     color: '#697083',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   levelGrid: {
@@ -1360,74 +1493,100 @@ const styles = StyleSheet.create({
     padding: 16,
     shadowColor: '#000',
     shadowOpacity: 0.16,
-    shadowOffset: { width: 0, height: 5 },
-    shadowRadius: 7,
-    elevation: 6,
+       shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 5,
   },
   levelCardDone: {
-    backgroundColor: '#ecffd9',
-    borderColor: '#74c856',
+    borderColor: '#9fd6b0',
+    backgroundColor: 'rgba(220,255,235,0.98)',
   },
   levelCardLocked: {
     opacity: 0.55,
   },
   levelCardTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
   levelNumberCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#ff7a00',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#e0d2a8',
     alignItems: 'center',
     justifyContent: 'center',
   },
   levelNumber: {
-    color: '#fff',
-    fontSize: 19,
+    color: '#2e2f3d',
     fontWeight: '900',
+    fontSize: 16,
   },
   levelStatusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#eaff00',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 1,
+    borderColor: '#e0d2a8',
   },
   levelStatusText: {
-    color: '#c01882',
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#697083',
   },
   levelCardTitle: {
-    marginTop: 13,
     color: '#2e2f3d',
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '900',
+    marginBottom: 2,
   },
   levelCardMeta: {
-    marginTop: 4,
-    color: '#666d7d',
-    fontSize: 13,
+    color: '#697083',
+    fontSize: 11,
     fontWeight: '700',
+    marginBottom: 10,
   },
   levelProgressTrack: {
-    height: 10,
+    height: 6,
     borderRadius: 999,
-    backgroundColor: '#d9ebbd',
-    marginTop: 14,
+    backgroundColor: 'rgba(0,0,0,0.08)',
     overflow: 'hidden',
+    marginBottom: 6,
   },
   levelProgressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#35b845',
+    backgroundColor: '#4CC38A',
   },
   levelFoundText: {
-    marginTop: 8,
-    color: '#4e5565',
-    fontSize: 12,
-    fontWeight: '800',
+    color: '#697083',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  levelActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  levelMiniBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#5B9BFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelBattleBtn: {
+    backgroundColor: '#FFD23F',
+  },
+  levelMiniBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });

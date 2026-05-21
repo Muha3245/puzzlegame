@@ -17,6 +17,7 @@ type WordGridProps = {
   words: string[];
   seed: string;
   found: FoundEntry[];
+  opponentFound?: FoundEntry[];
   hintCell?: Point | null;
   onFound: (entry: FoundEntry) => void;
   width: number;
@@ -27,6 +28,7 @@ export function WordGrid({
   words,
   seed,
   found,
+  opponentFound = [],
   hintCell,
   onFound,
   width,
@@ -290,6 +292,23 @@ export function WordGrid({
       {...panResponder.panHandlers}
     >
       <Svg pointerEvents="none" width={width} height={width} style={StyleSheet.absoluteFill}>
+        {opponentFound.map((entry) => {
+          const start = centerOf(entry.start);
+          const end = centerOf(entry.end);
+          return (
+            <Line
+              key={`opp-${entry.word}-${entry.start.join('-')}-${entry.end.join('-')}`}
+              x1={start.x}
+              y1={start.y}
+              x2={end.x}
+              y2={end.y}
+              stroke="#FF4D8D"
+              strokeWidth={Math.max(8, cell * 0.56)}
+              strokeLinecap="round"
+              opacity={0.34}
+            />
+          );
+        })}
         {found.map((entry) => {
           const start = centerOf(entry.start);
           const end = centerOf(entry.end);
