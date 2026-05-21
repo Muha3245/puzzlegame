@@ -77,6 +77,20 @@ function makeUniqueLevelWords(categoryWords: string[], totalWords: number, level
   return selected;
 }
 
+
+function wordKey(word: string) {
+  return word.toUpperCase().trim();
+}
+
+function countUniqueFound(entries: FoundEntry[]) {
+  return new Set(entries.map((entry) => wordKey(entry.word)).filter(Boolean)).size;
+}
+
+function hasFoundWord(entries: FoundEntry[], word: string) {
+  const key = wordKey(word);
+  return entries.some((entry) => wordKey(entry.word) === key);
+}
+
 function getDifficulty(value?: string): DifficultyId {
   if (value === 'medium' || value === 'hard' || value === 'pro') return value;
   return 'easy';
@@ -176,13 +190,22 @@ export default function Game() {
   const bottomSafe   = Math.max(insets.bottom, 14);
   const toolbarH     = 82 + bottomSafe;
   const gridMax      = Math.min(width - 40, height * 0.45, 420);
-  const progress     = levelWords.length ? (found.length / levelWords.length) * 100 : 0;
+  const combinedFoundEntries = useMemo(() => {
+    const merged: FoundEntry[] = [];
+    [...found, ...opponentFoundEntries].forEach((entry) => {
+      if (!hasFoundWord(merged, entry.word)) merged.push(entry);
+    });
+    return merged;
+  }, [found, opponentFoundEntries]);
+  const combinedFoundCount = countUniqueFound(combinedFoundEntries);
+  const visibleFoundCount = isLiveBattle ? combinedFoundCount : found.length;
+  const progress     = levelWords.length ? (visibleFoundCount / levelWords.length) * 100 : 0;
   const elapsedSeconds = Math.max(0, diffCfg.timerSec - timeLeft);
   const myBattleState = battlePlayers.find((p) => p.userId === myUid);
   const opponentBattleState = battlePlayers.find((p) => p.userId !== myUid);
   // Always use local found state for my score (instant, no DB lag)
   const myLiveScore = found.length * 10;
-  const opponentLiveScore = opponentBattleState?.score ?? 0;
+  const opponentLiveScore = Math.max(opponentBattleState?.score ?? 0, opponentFoundEntries.length * 10);
 
   // ── Timer management ──
   const stopTimer = useCallback(() => {
@@ -456,74 +479,135 @@ export default function Game() {
 
   // ── Word found ──
   const onFound = useCallback((entry: FoundEntry) => {
-    setFound((prevFound) => {
-      const up = entry.word.toUpperCase().trim();
-      if (prevFound.some((f) => f.word.toUpperCase().trim() === up)) return prevFound;
-      const newFound = [...prevFound, entry];
+    const up = wordKey(entry.word);
+    const allKnownFound = isLiveBattle ? combinedFoundEntries : found;
 
-      playGameSound('wordFound', state.settings.sound);
-      setBanner({ text: PRAISE[Math.floor(Math.random() * PRAISE.length)], color: entry.color });
-      setTimeout(() => setBanner(null), 1150);
-      setWordsFound(progressKey, newFound.length);
+    // In live battle the board is shared. If opponent already found this word,
+    // do not let the same word count twice on this device.
+    if (hasFoundWord(allKnownFound, up)) return;
 
-      // Multiplayer scoring
-      if (isMulti) {
-        setScores((prev) => ({ ...prev, [currentPlayer]: prev[currentPlayer] + 1 }));
-        setTurnFound((tf) => [...tf, entry]);
-        const remaining = turnsLeft - 1;
-        setTurnsLeft(remaining);
+    const newFound = [...found, entry];
+    const newCombinedFound = isLiveBattle ? [...combinedFoundEntries, entry] : newFound;
+    const newCombinedCount = countUniqueFound(newCombinedFound);
+    const isLevelComplete = newCombinedCount >= levelWords.length;
+
+    setFound(newFound);
+
+    playGameSound('wordFound', state.settings.sound);
+    setBanner({ text: PRAISE[Math.floor(Math.random() * PRAISE.length)], color: entry.color });
+    setTimeout(() => setBanner(null), 1150);
+    setWordsFound(progressKey, isLiveBattle ? newCombinedCount : newFound.length);
+
+    // Multiplayer scoring
+    if (isMulti) {
+      setScores((prev) => ({ ...prev, [currentPlayer]: prev[currentPlayer] + 1 }));
+      setTurnFound((tf) => [...tf, entry]);
+      setTurnsLeft((remaining) => Math.max(remaining - 1, 0));
+    }
+
+    if (isLiveBattle && roomId) {
+      const progressUpdate = {
+        roomId,
+        score:          newFound.length * 10,
+        wordsFound:     newFound.length,
+        totalWords:     levelWords.length,
+        elapsedSeconds,
+        lastWord:       up,
+        isFinished:     isLevelComplete,
+      };
+
+      updateBattleProgress(progressUpdate).catch(() => {});
+
+      if (myUidRef.current && sendBattleScore.current) {
+        sendBattleScore.current({
+          userId:     myUidRef.current,
+          score:      newFound.length * 10,
+          wordsFound: newFound.length,
+          totalWords: levelWords.length,
+          lastWord:   up,
+          foundEntry: entry,
+          isFinished: isLevelComplete,
+        });
+      }
+    }
+
+    if (isLevelComplete) {
+      stopTimer();
+      const options = isLiveBattle ? [] : makeRewardOptions();
+      setRewardOptions(options);
+      setSelectedReward(null);
+      setRewardCoins(0);
+      setCanContinue(isLiveBattle || options.length === 0);
+
+      if (options.length === 0 && !isLiveBattle) {
+        completeOnlineLevel({ categoryKey, difficulty, level: levelNumber, foundWords: newFound.length, rewardCoins: 0 }).catch(() => {});
       }
 
-      if (isLiveBattle && roomId) {
-        const progressUpdate = {
-          roomId,
-          score:          newFound.length * 10,
-          wordsFound:     newFound.length,
-          totalWords:     levelWords.length,
-          elapsedSeconds,
-          lastWord:       up,
-          isFinished:     newFound.length === levelWords.length,
-        };
-        // DB write for persistence + winner resolution
-        updateBattleProgress(progressUpdate).catch(() => {});
-        // Broadcast to opponent instantly — bypasses RLS, arrives in <50 ms
-        if (myUidRef.current && sendBattleScore.current) {
-          sendBattleScore.current({
-            userId:     myUidRef.current,
-            score:      newFound.length * 10,
-            wordsFound: newFound.length,
-            totalWords: levelWords.length,
-            lastWord:   up,
-            foundEntry: entry,
-            isFinished: newFound.length === levelWords.length,
-          });
+      setTimeout(() => {
+        playGameSound('win', state.settings.sound);
+        if (isLiveBattle) {
+          const opponentWords = Math.max(opponentBattleState?.wordsFound ?? 0, opponentFoundEntries.length);
+          const winnerId = newFound.length > opponentWords
+            ? myUidRef.current
+            : opponentWords > newFound.length
+              ? (opponentBattleState?.userId ?? null)
+              : null;
+          endBattleNow({ winnerId, reason: 'completed' }).catch(() => {});
+        } else {
+          setWon(true);
         }
-      }
+        if (options.length > 0) setTimeout(startRewardShuffle, 180);
+      }, 650);
+    }
+  }, [
+    state.settings.sound,
+    progressKey,
+    isMulti,
+    isLiveBattle,
+    currentPlayer,
+    found,
+    combinedFoundEntries,
+    levelWords.length,
+    roomId,
+    elapsedSeconds,
+    setWordsFound,
+    stopTimer,
+    categoryKey,
+    difficulty,
+    levelNumber,
+    opponentBattleState?.wordsFound,
+    opponentBattleState?.userId,
+    opponentFoundEntries.length,
+    endBattleNow,
+  ]);
 
-      if (newFound.length === levelWords.length) {
-        stopTimer();
-        const options = isLiveBattle ? [] : makeRewardOptions();
-        setRewardOptions(options);
-        setSelectedReward(null);
-        setRewardCoins(0);
-        setCanContinue(isLiveBattle || options.length === 0);
-        if (options.length === 0) {
-          if (!isLiveBattle) completeOnlineLevel({ categoryKey, difficulty, level: levelNumber, foundWords: newFound.length, rewardCoins: 0 }).catch(() => {});
-        }
-        setTimeout(() => {
-          playGameSound('win', state.settings.sound);
-          if (isLiveBattle) {
-            endBattleNow({ winnerId: myUidRef.current, reason: 'completed' }).catch(() => {});
-          } else {
-            setWon(true);
-          }
-          if (options.length > 0) setTimeout(startRewardShuffle, 180);
-        }, 650);
-      }
+  // Finish a live battle when the shared board is complete. This covers the case
+  // where you found 3 words and the opponent found 1 word in a 4-word level.
+  useEffect(() => {
+    if (!isLiveBattle || battleFinishedReason || won || !levelWords.length) return;
+    if (combinedFoundCount < levelWords.length) return;
 
-      return newFound;
-    });
-  }, [state.settings.sound, progressKey, isMulti, isLiveBattle, currentPlayer, turnsLeft, levelWords.length, roomId, elapsedSeconds]);
+    const myWords = found.length;
+    const opponentWords = Math.max(opponentBattleState?.wordsFound ?? 0, opponentFoundEntries.length);
+    const winnerId = myWords > opponentWords
+      ? myUidRef.current
+      : opponentWords > myWords
+        ? (opponentBattleState?.userId ?? null)
+        : null;
+
+    endBattleNow({ winnerId, reason: 'completed' }).catch(() => {});
+  }, [
+    isLiveBattle,
+    battleFinishedReason,
+    won,
+    combinedFoundCount,
+    levelWords.length,
+    found.length,
+    opponentBattleState?.wordsFound,
+    opponentBattleState?.userId,
+    opponentFoundEntries.length,
+    endBattleNow,
+  ]);
 
   // Multiplayer: switch turn (one word per turn)
   useEffect(() => {
@@ -542,7 +626,7 @@ export default function Game() {
     if (state.coins < cost) return;
 
     const remaining = levelWords.filter(
-      (w) => !found.some((f) => f.word.toUpperCase().trim() === w.toUpperCase().trim())
+      (w) => !hasFoundWord(isLiveBattle ? combinedFoundEntries : found, w)
     );
     if (kind === 'freeze') {
       addCoins(-cost);
@@ -581,14 +665,19 @@ export default function Game() {
       const oppName  = opponentBattleState?.displayName ?? 'Opponent';
       const s1       = myLiveScore;
       const s2       = opponentLiveScore;
-      const myWords  = myBattleState?.wordsFound ?? found.length;
-      const oppWords = opponentBattleState?.wordsFound ?? 0;
-      const iWon     = myWords > oppWords || (myWords === oppWords && s1 >= s2);
+      const myWords  = found.length;
+      const oppWords = Math.max(opponentBattleState?.wordsFound ?? 0, opponentFoundEntries.length);
+      const iWon     = battleWinnerId
+        ? battleWinnerId === myUidRef.current
+        : myWords > oppWords || (myWords === oppWords && s1 >= s2);
       // Coin rewards: winner gets +60, loser loses -25 (per difficulty scaling)
       const diffBonus = difficulty === 'medium' ? 10 : difficulty === 'hard' ? 25 : difficulty === 'pro' ? 50 : 0;
       const coinDelta = iWon ? 60 + diffBonus : -(25 + Math.floor(diffBonus / 2));
+      const opponentId = opponentBattleState?.userId ?? (battleRoom
+        ? (myUidRef.current === battleRoom.player1Id ? battleRoom.player2Id : battleRoom.player1Id)
+        : '');
       router.replace(
-        `/winner?winner=${encodeURIComponent(iWon ? myName : oppName)}&p1=${encodeURIComponent(myName)}&p2=${encodeURIComponent(oppName)}&s1=${s1}&s2=${s2}&coins=${coinDelta}&id=${category.id}&categoryKey=${categoryKey}&difficulty=${difficulty}&level=${levelNumber}&isBattle=1`
+        `/winner?winner=${encodeURIComponent(iWon ? myName : oppName)}&p1=${encodeURIComponent(myName)}&p2=${encodeURIComponent(oppName)}&s1=${s1}&s2=${s2}&coins=${coinDelta}&id=${category.id}&categoryKey=${categoryKey}&title=${encodeURIComponent(displayTitle)}&difficulty=${difficulty}&level=${levelNumber}&isBattle=1&opponentId=${encodeURIComponent(opponentId || '')}&opponentName=${encodeURIComponent(oppName)}`
       );
       return;
     }
@@ -704,7 +793,7 @@ export default function Game() {
             </View>
             <View style={styles.wordsList}>
               {levelWords.map((word) => {
-                const done = found.some((f) => f.word.toUpperCase().trim() === word);
+                const done = (isLiveBattle ? combinedFoundEntries : found).some((f) => f.word.toUpperCase().trim() === word);
                 return (
                   <View key={word} style={[styles.wordChip, done && styles.wordChipDone]}>
                     {done && <Ionicons name="checkmark-circle" size={11} color={Theme.success} />}
@@ -734,7 +823,7 @@ export default function Game() {
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: diffCfg.tint }]} />
             </View>
-            <Text style={styles.progressLabel}>{found.length}/{levelWords.length}</Text>
+            <Text style={styles.progressLabel}>{visibleFoundCount}/{levelWords.length}</Text>
           </View>
         </View>
 
@@ -840,7 +929,7 @@ export default function Game() {
                   </View>
                   <Text style={styles.winTitle}>Time's Up!</Text>
                   <Text style={styles.winSub}>
-                    You found {found.length} of {levelWords.length} words.
+                    You found {visibleFoundCount} of {levelWords.length} words.
                     {isLiveBattle ? `\nYour score: ${myLiveScore} • Opponent: ${opponentLiveScore}` : isMulti ? `\n${scores[1] > scores[2] ? player1 : scores[2] > scores[1] ? player2 : 'Tie!'} leads!` : ''}
                   </Text>
                 </>

@@ -1,8 +1,9 @@
 // app/leaderboard.tsx
 // Global leaderboard — dark navy glass aesthetic.
 
-import { router } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from "@react-navigation/native";
+import { router } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -12,38 +13,75 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
-import { getGlobalLeaderboard, PublicUser } from '../lib/online';
-import { Theme } from '../constants/theme';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Theme } from "../constants/theme";
+import { getGlobalLeaderboard, PublicUser } from "../lib/online";
 
 const BG_URI =
-  'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?auto=format&fit=crop&w=1200&q=90';
+  "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?auto=format&fit=crop&w=1200&q=90";
 
 type LeaderboardUser = PublicUser & { rank: number };
 
-const RANK_MEDALS = ['🥇', '🥈', '🥉'];
-const RANK_COLORS  = ['#FFD700', '#C0C0C0', '#CD7F32'];
+const RANK_MEDALS = ["🥇", "🥈", "🥉"];
+const RANK_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32"];
 
 export default function LeaderboardScreen() {
   const [players, setPlayers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorText, setErrorText] = useState("");
+  const isMountedRef = useRef(true);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getGlobalLeaderboard(50);
-      setPlayers(data as LeaderboardUser[]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      setErrorText("");
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+      const timeout = new Promise<LeaderboardUser[]>((_, reject) => {
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Leaderboard request timed out. Please check internet or Supabase RLS policy.",
+              ),
+            ),
+          12000,
+        );
+      });
+
+      const data = await Promise.race([
+        getGlobalLeaderboard(50) as Promise<LeaderboardUser[]>,
+        timeout,
+      ]);
+
+      if (!isMountedRef.current) return;
+      setPlayers(data);
+    } catch (error: any) {
+      if (!isMountedRef.current) return;
+      setPlayers([]);
+      setErrorText(error?.message || "Could not load leaderboard.");
+    } finally {
+      if (isMountedRef.current) setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      isMountedRef.current = true;
+      load();
+
+      return () => {
+        isMountedRef.current = false;
+      };
+    }, [load]),
+  );
 
   return (
-    <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
+    <ImageBackground
+      source={{ uri: BG_URI }}
+      style={styles.bg}
+      resizeMode="cover"
+    >
       <View style={styles.overlay} />
       <View style={styles.orb1} />
       <View style={styles.orb2} />
@@ -61,7 +99,11 @@ export default function LeaderboardScreen() {
         </View>
 
         {loading && players.length === 0 ? (
-          <ActivityIndicator style={{ marginTop: 60 }} color={Theme.primary} size="large" />
+          <ActivityIndicator
+            style={{ marginTop: 60 }}
+            color={Theme.primary}
+            size="large"
+          />
         ) : (
           <FlatList
             data={players}
@@ -76,36 +118,64 @@ export default function LeaderboardScreen() {
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
-                <Text style={styles.emptyIcon}>🏜️</Text>
-                <Text style={styles.emptyText}>No players yet</Text>
-                <Text style={styles.emptySub}>Complete levels to appear here!</Text>
+                <Text style={styles.emptyIcon}>{errorText ? "⚠️" : "🏜️"}</Text>
+                <Text style={styles.emptyText}>
+                  {errorText ? "Leaderboard not loaded" : "No players yet"}
+                </Text>
+                <Text style={styles.emptySub}>
+                  {errorText || "Complete levels to appear here!"}
+                </Text>
+                <Pressable onPress={load} style={styles.retryBtn}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </Pressable>
               </View>
             }
             renderItem={({ item }) => {
               const isTop3 = item.rank <= 3;
-              const medal  = RANK_MEDALS[item.rank - 1];
+              const medal = RANK_MEDALS[item.rank - 1];
               const rankColor = RANK_COLORS[item.rank - 1] ?? Theme.textDim;
 
               return (
                 <View style={[styles.row, isTop3 && styles.rowTop]}>
                   {/* Rank badge */}
-                  <View style={[styles.rankBadge, isTop3 && { borderColor: rankColor }]}>
+                  <View
+                    style={[
+                      styles.rankBadge,
+                      isTop3 && { borderColor: rankColor },
+                    ]}
+                  >
                     {isTop3 ? (
                       <Text style={styles.medalEmoji}>{medal}</Text>
                     ) : (
-                      <Text style={[styles.rankNum, { color: rankColor }]}>{item.rank}</Text>
+                      <Text style={[styles.rankNum, { color: rankColor }]}>
+                        {item.rank}
+                      </Text>
                     )}
                   </View>
 
                   {/* Name + meta */}
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.name} numberOfLines={1}>{item.displayName}</Text>
-                    <Text style={styles.meta}>{item.levelsCompleted ?? 0} levels completed</Text>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {item.displayName}
+                    </Text>
+                    <Text style={styles.meta}>
+                      {item.levelsCompleted ?? 0} levels completed
+                    </Text>
                   </View>
 
                   {/* Score pill */}
-                  <View style={[styles.scorePill, isTop3 && { backgroundColor: `${rankColor}22`, borderColor: `${rankColor}55` }]}>
-                    <Text style={[styles.scoreText, isTop3 && { color: rankColor }]}>
+                  <View
+                    style={[
+                      styles.scorePill,
+                      isTop3 && {
+                        backgroundColor: `${rankColor}22`,
+                        borderColor: `${rankColor}55`,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.scoreText, isTop3 && { color: rankColor }]}
+                    >
                       {(item.totalScore ?? 0).toLocaleString()}
                     </Text>
                     <Text style={styles.scorePts}>pts</Text>
@@ -121,82 +191,115 @@ export default function LeaderboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#050c20' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,8,32,0.75)' },
+  bg: { flex: 1, backgroundColor: "#050c20" },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,8,32,0.75)",
+  },
   orb1: {
-    position: 'absolute', top: -60, right: -60,
-    width: 220, height: 220, borderRadius: 110,
-    backgroundColor: 'rgba(255,210,63,0.1)',
+    position: "absolute",
+    top: -60,
+    right: -60,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(255,210,63,0.1)",
   },
   orb2: {
-    position: 'absolute', bottom: 40, left: -60,
-    width: 200, height: 200, borderRadius: 100,
-    backgroundColor: 'rgba(91,155,255,0.1)',
+    position: "absolute",
+    bottom: 40,
+    left: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "rgba(91,155,255,0.1)",
   },
   safe: { flex: 1 },
 
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
   backBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
-    alignItems: 'center', justifyContent: 'center',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  backText: { color: '#fff', fontSize: 32, fontWeight: '700', lineHeight: 34 },
-  title: { color: '#fff', fontSize: 24, fontWeight: '900' },
-  sub: { color: Theme.textDim, fontSize: 13, marginTop: 2, fontWeight: '700' },
+  backText: { color: "#fff", fontSize: 32, fontWeight: "700", lineHeight: 34 },
+  title: { color: "#fff", fontSize: 24, fontWeight: "900" },
+  sub: { color: Theme.textDim, fontSize: 13, marginTop: 2, fontWeight: "700" },
 
   list: { padding: 16, gap: 10, paddingBottom: 32 },
 
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 20,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: "rgba(255,255,255,0.1)",
   },
   rowTop: {
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: "rgba(255,255,255,0.09)",
+    borderColor: "rgba(255,255,255,0.18)",
   },
 
   rankBadge: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   medalEmoji: { fontSize: 22 },
-  rankNum: { fontWeight: '900', fontSize: 16 },
+  rankNum: { fontWeight: "900", fontSize: 16 },
 
-  name: { color: '#fff', fontWeight: '900', fontSize: 15 },
+  name: { color: "#fff", fontWeight: "900", fontSize: 15 },
   meta: { color: Theme.textDim, fontSize: 12, marginTop: 2 },
 
   scorePill: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    flexDirection: "row",
+    alignItems: "baseline",
     gap: 2,
-    backgroundColor: 'rgba(91,155,255,0.15)',
+    backgroundColor: "rgba(91,155,255,0.15)",
     borderWidth: 1,
-    borderColor: 'rgba(91,155,255,0.3)',
+    borderColor: "rgba(91,155,255,0.3)",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  scoreText: { color: Theme.primary, fontWeight: '900', fontSize: 14 },
-  scorePts: { color: Theme.textDim, fontWeight: '700', fontSize: 10 },
+  scoreText: { color: Theme.primary, fontWeight: "900", fontSize: 14 },
+  scorePts: { color: Theme.textDim, fontWeight: "700", fontSize: 10 },
 
-  emptyWrap: { alignItems: 'center', marginTop: 60, gap: 8 },
+  emptyWrap: { alignItems: "center", marginTop: 60, gap: 8 },
   emptyIcon: { fontSize: 48 },
-  emptyText: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  emptySub: { color: Theme.textDim, fontSize: 13, fontWeight: '600' },
+  emptyText: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  emptySub: {
+    color: Theme.textDim,
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingHorizontal: 24,
+  },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: Theme.primary,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  retryText: { color: "#081029", fontWeight: "900", fontSize: 13 },
 });

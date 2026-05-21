@@ -56,8 +56,10 @@ export function WordGrid({
   const onFoundRef = useRef(onFound);
 
   useEffect(() => {
-    foundRef.current = found;
-  }, [found]);
+    // Include opponent-found words too, because live battle uses one shared board.
+    // This prevents both players from scoring the same word twice.
+    foundRef.current = [...found, ...opponentFound];
+  }, [found, opponentFound]);
 
   useEffect(() => {
     onFoundRef.current = onFound;
@@ -270,7 +272,7 @@ export function WordGrid({
 
   const isSelected = (row: number, col: number) => {
     const isInActiveDrag = linePoints.some((p) => p[0] === row && p[1] === col);
-    const isInFound = found.some((entry) =>
+    const isInFound = [...found, ...opponentFound].some((entry) =>
       getLinePoints(entry.start, entry.end).some((p) => p[0] === row && p[1] === col)
     );
 

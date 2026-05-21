@@ -109,6 +109,7 @@ export default function Winner() {
 
   const sendSameLevelRematch = async () => {
     if (!params.opponentId) {
+      Alert.alert('Rematch error', 'Opponent information is missing. Please start the rematch from Battle Arena.');
       router.replace('/battle');
       return;
     }
@@ -123,7 +124,7 @@ export default function Winner() {
 
     try {
       setRematchBusy(true);
-      await createBattleRoom({
+      const room = await createBattleRoom({
         friend: opponent,
         categoryId: params.id ?? '',
         categoryKey: params.categoryKey ?? params.id ?? '',
@@ -131,8 +132,10 @@ export default function Winner() {
         difficulty: params.difficulty ?? 'easy',
         level: Number(params.level ?? 1),
       });
-      Alert.alert('Rematch sent', 'Your friend can accept the same-level rematch from Battle Arena.');
-      router.replace('/battle');
+
+      router.replace(
+        `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`
+      );
     } catch (error: any) {
       Alert.alert('Rematch error', error?.message || 'Unable to send rematch.');
     } finally {
