@@ -37,7 +37,7 @@ async function setupAudio() {
   });
 }
 
-export async function playRelaxMusic(enabled: boolean, theme: MusicTheme = 'relax') {
+export async function playRelaxMusic(enabled: boolean, theme: MusicTheme = 'relax', volume = 0.5) {
   try {
     await setupAudio();
 
@@ -61,7 +61,7 @@ export async function playRelaxMusic(enabled: boolean, theme: MusicTheme = 'rela
     if (!music) {
       const created = await Audio.Sound.createAsync(MUSIC_FILES[theme], {
         isLooping: true,
-        volume: 0.28,
+        volume: Math.max(0, Math.min(1, volume)),
         shouldPlay: true,
       });
 
@@ -75,7 +75,13 @@ export async function playRelaxMusic(enabled: boolean, theme: MusicTheme = 'rela
     if (status.isLoaded && !status.isPlaying) {
       await music.playAsync();
     }
+
+    await music.setVolumeAsync(Math.max(0, Math.min(1, volume))).catch(() => {});
   } catch {}
+}
+
+export async function setMusicVolume(volume: number) {
+  if (music) await music.setVolumeAsync(Math.max(0, Math.min(1, volume))).catch(() => {});
 }
 
 export async function playGameSound(name: SoundName, enabled: boolean) {
@@ -98,4 +104,24 @@ export async function playGameSound(name: SoundName, enabled: boolean) {
     await sound.setPositionAsync(0);
     await sound.playAsync();
   } catch {}
+}
+
+// Screen-to-music theme mapping for immersive gaming experience
+const SCREEN_MUSIC_MAP: Record<string, MusicTheme> = {
+  'index': 'puzzle',
+  'levels': 'puzzle',
+  '(tabs)/index': 'puzzle',
+  '(tabs)/explore': 'puzzle',
+  'game': 'relax',
+  'battle': 'relax',
+  'coins': 'candy',
+  'shop': 'candy',
+  'profile': 'forest',
+  'friends': 'forest',
+  'leaderboard': 'forest',
+  'winner': 'candy',
+};
+
+export function getScreenMusicTheme(routeName: string): MusicTheme {
+  return SCREEN_MUSIC_MAP[routeName] || 'relax';
 }

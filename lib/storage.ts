@@ -19,6 +19,7 @@ export type AppState = {
     sound: boolean;
     music: boolean;
     musicTheme: MusicTheme;
+    musicVolume: number;
     haptics: boolean;
     notify: boolean;
   };
@@ -32,12 +33,13 @@ const DEFAULTS: AppState = {
     sound: true,
     music: true,
     musicTheme: 'relax',
+    musicVolume: 0.5,
     haptics: true,
     notify: true,
   },
   profile: {
     name: 'Player',
-    avatar: '🧘',
+    avatar: 'game-controller',
     levelTitle: 'Calm Solver',
   },
 };

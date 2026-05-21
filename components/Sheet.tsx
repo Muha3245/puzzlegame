@@ -7,8 +7,10 @@ import {
   Text,
   View,
 } from 'react-native';
+import { GlassEffects } from '../constants/theme';
 
 export function Sheet({
+  visible,
   title,
   onClose,
   children,
@@ -18,6 +20,7 @@ export function Sheet({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  if (visible === false) return null;
   return (
     <View style={styles.root}>
       <Pressable style={styles.backdrop} onPress={onClose} />
@@ -52,14 +55,14 @@ const styles = StyleSheet.create({
 
   sheet: {
     maxHeight: '88%',
-    backgroundColor: '#17122F',
+    ...GlassEffects.strong,
+    backgroundColor: 'rgba(13,5,0,0.96)',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 18,
     paddingTop: 10,
     paddingBottom: 28,
     borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
   },
 
   handle: {

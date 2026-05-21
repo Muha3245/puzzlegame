@@ -6,7 +6,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { ScreenLayout } from '../components/ui/ScreenLayout';
-import { Theme } from '../constants/theme';
+import { HighlightText } from '../components/HighlightText';
+import { Theme, GlassEffects } from '../constants/theme';
 import { useAppState } from '../lib/storage';
 import { createBattleRoom, PublicUser } from '../lib/online';
 
@@ -92,7 +93,7 @@ export default function Winner() {
   } else if (isBattle) {
     if (iWon) {
       iconName  = 'flash';
-      titleText = 'Victory! ⚡';
+      titleText = 'Victory!';
       subText   = `You dominated the battle! ${coinDelta > 0 ? `+${coinDelta} coins earned.` : ''}`;
     } else {
       iconName  = 'skull-outline';
@@ -177,9 +178,13 @@ export default function Winner() {
         </Animated.View>
 
         {/* Title */}
-        <Text style={[styles.winnerLabel, isBattle && !iWon && !isTie && { color: Theme.danger }]}>
+        <HighlightText
+          size="large"
+          color={isBattle && !iWon && !isTie ? Theme.danger : Theme.warn}
+          style={styles.winnerLabel}
+        >
           {titleText}
-        </Text>
+        </HighlightText>
         <Text style={styles.winnerSub}>{subText}</Text>
 
         {/* Score comparison */}
@@ -297,7 +302,13 @@ function ScoreRow({
         <Text style={[styles.scoreName, align === 'right' && { textAlign: 'right' }]} numberOfLines={1}>
           {name}
         </Text>
-        <Text style={[styles.scoreNum, isWinner && { color: Theme.warn }]}>{score}</Text>
+        <HighlightText
+          size="large"
+          color={isWinner ? Theme.warn : '#fff'}
+          style={[styles.scoreNum, align === 'right' && { textAlign: 'right' }]}
+        >
+          {score}
+        </HighlightText>
         <Text style={[styles.scoreSubLabel, align === 'right' && { textAlign: 'right' }]}>
           {label ?? 'words'}
         </Text>
@@ -335,8 +346,8 @@ const styles = StyleSheet.create({
 
   scoreCard: {
     width: '100%', flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    ...GlassEffects.medium,
+    borderRadius: 24,
     padding: 20, marginBottom: 20,
   },
   scoreRow: { flex: 1, flexDirection: 'row', alignItems: 'center' },

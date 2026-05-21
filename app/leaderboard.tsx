@@ -1,11 +1,10 @@
 // app/leaderboard.tsx
-// Global leaderboard — dark navy glass aesthetic.
 
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   ImageBackground,
   Pressable,
@@ -15,6 +14,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AnimatedEntry } from "../components/AnimatedEntry";
+import { SkeletonLeaderboardRow } from "../components/SkeletonLoader";
 import { Theme } from "../constants/theme";
 import { getGlobalLeaderboard, PublicUser } from "../lib/online";
 
@@ -23,7 +24,6 @@ const BG_URI =
 
 type LeaderboardUser = PublicUser & { rank: number };
 
-const RANK_MEDALS = ["🥇", "🥈", "🥉"];
 const RANK_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32"];
 
 export default function LeaderboardScreen() {
@@ -90,20 +90,23 @@ export default function LeaderboardScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>‹</Text>
+            <Ionicons name="chevron-back" size={22} color="#fff" />
           </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>🏆 Leaderboard</Text>
-            <Text style={styles.sub}>Top players by total score</Text>
+          <View style={styles.titleWrap}>
+            <View style={styles.titleIconWrap}>
+              <Ionicons name="trophy" size={20} color={Theme.warn} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>Leaderboard</Text>
+              <Text style={styles.sub}>Top players by total score</Text>
+            </View>
           </View>
         </View>
 
         {loading && players.length === 0 ? (
-          <ActivityIndicator
-            style={{ marginTop: 60 }}
-            color={Theme.primary}
-            size="large"
-          />
+          <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: 10 }}>
+            {Array.from({ length: 9 }).map((_, i) => <SkeletonLeaderboardRow key={i} />)}
+          </View>
         ) : (
           <FlatList
             data={players}
@@ -118,7 +121,11 @@ export default function LeaderboardScreen() {
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
-                <Text style={styles.emptyIcon}>{errorText ? "⚠️" : "🏜️"}</Text>
+                <Ionicons
+                  name={errorText ? "warning" : "trophy-outline"}
+                  size={48}
+                  color={Theme.textDim}
+                />
                 <Text style={styles.emptyText}>
                   {errorText ? "Leaderboard not loaded" : "No players yet"}
                 </Text>
@@ -130,12 +137,12 @@ export default function LeaderboardScreen() {
                 </Pressable>
               </View>
             }
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
               const isTop3 = item.rank <= 3;
-              const medal = RANK_MEDALS[item.rank - 1];
               const rankColor = RANK_COLORS[item.rank - 1] ?? Theme.textDim;
 
               return (
+                <AnimatedEntry delay={Math.min(index, 9) * 52} from="bottom">
                 <View style={[styles.row, isTop3 && styles.rowTop]}>
                   {/* Rank badge */}
                   <View
@@ -145,7 +152,7 @@ export default function LeaderboardScreen() {
                     ]}
                   >
                     {isTop3 ? (
-                      <Text style={styles.medalEmoji}>{medal}</Text>
+                      <Ionicons name="trophy" size={22} color={rankColor} />
                     ) : (
                       <Text style={[styles.rankNum, { color: rankColor }]}>
                         {item.rank}
@@ -181,6 +188,7 @@ export default function LeaderboardScreen() {
                     <Text style={styles.scorePts}>pts</Text>
                   </View>
                 </View>
+                </AnimatedEntry>
               );
             }}
           />
@@ -191,10 +199,10 @@ export default function LeaderboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: "#050c20" },
+  bg: { flex: 1, backgroundColor: "#0D0500" },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,32,0.75)",
+    backgroundColor: "rgba(13,5,0,0.82)",
   },
   orb1: {
     position: "absolute",
@@ -203,7 +211,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: "rgba(255,210,63,0.1)",
+    backgroundColor: "rgba(255,100,0,0.13)",
   },
   orb2: {
     position: "absolute",
@@ -212,7 +220,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: "rgba(91,155,255,0.1)",
+    backgroundColor: "rgba(255,60,0,0.09)",
   },
   safe: { flex: 1 },
 
@@ -227,15 +235,23 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,120,0,0.15)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(255,150,0,0.25)",
     alignItems: "center",
     justifyContent: "center",
   },
-  backText: { color: "#fff", fontSize: 32, fontWeight: "700", lineHeight: 34 },
-  title: { color: "#fff", fontSize: 24, fontWeight: "900" },
-  sub: { color: Theme.textDim, fontSize: 13, marginTop: 2, fontWeight: "700" },
+  titleWrap: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  titleIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,120,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  title: { color: "#fff", fontSize: 22, fontWeight: "900" },
+  sub: { color: Theme.textDim, fontSize: 12, marginTop: 1, fontWeight: "700" },
 
   list: { padding: 16, gap: 10, paddingBottom: 32 },
 
@@ -243,15 +259,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.07)",
     borderRadius: 20,
     padding: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: "rgba(255,150,0,0.18)",
   },
   rowTop: {
     backgroundColor: "rgba(255,255,255,0.09)",
-    borderColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(255,150,0,0.28)",
   },
 
   rankBadge: {
@@ -260,11 +276,10 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.15)",
+    borderColor: "rgba(255,150,0,0.20)",
     alignItems: "center",
     justifyContent: "center",
   },
-  medalEmoji: { fontSize: 22 },
   rankNum: { fontWeight: "900", fontSize: 16 },
 
   name: { color: "#fff", fontWeight: "900", fontSize: 15 },
@@ -274,9 +289,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "baseline",
     gap: 2,
-    backgroundColor: "rgba(91,155,255,0.15)",
+    backgroundColor: "rgba(255,120,0,0.15)",
     borderWidth: 1,
-    borderColor: "rgba(91,155,255,0.3)",
+    borderColor: "rgba(255,150,0,0.30)",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -285,7 +300,6 @@ const styles = StyleSheet.create({
   scorePts: { color: Theme.textDim, fontWeight: "700", fontSize: 10 },
 
   emptyWrap: { alignItems: "center", marginTop: 60, gap: 8 },
-  emptyIcon: { fontSize: 48 },
   emptyText: { color: "#fff", fontSize: 18, fontWeight: "900" },
   emptySub: {
     color: Theme.textDim,
@@ -301,5 +315,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
   },
-  retryText: { color: "#081029", fontWeight: "900", fontSize: 13 },
+  retryText: { color: "#fff", fontWeight: "900", fontSize: 13 },
 });

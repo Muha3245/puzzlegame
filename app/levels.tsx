@@ -14,11 +14,14 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Ellipse, Line, Path, Polygon, Rect } from 'react-native-svg';
 import { CATEGORIES } from '../constants/categories';
+import { Theme, GlassEffects } from '../constants/theme';
+import { HighlightText } from '../components/HighlightText';
 import { useAppState } from '../lib/storage';
+import { Ionicons } from '@expo/vector-icons';
 
 const LEVELS_PER_CATEGORY = 8;
 const BG_URI =
-  'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80';
+  'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1200&q=80';
 
 type DifficultyId = 'easy' | 'medium' | 'hard' | 'pro';
 
@@ -945,8 +948,10 @@ export default function Levels() {
   return (
     <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
       <View style={styles.overlay} />
-      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" />
+      <View style={styles.orb1} />
+      <View style={styles.orb2} />
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+        <StatusBar barStyle="light-content" />
 
         {!selectedCategory ? (
           <ScrollView
@@ -960,30 +965,30 @@ export default function Levels() {
             ]}
           >
             <View style={styles.topActions}>
-              <Pressable onPress={() => router.push('/shop')} style={styles.coinPill}>
-                <Text style={styles.coinIcon}>🪙</Text>
+              <Pressable onPress={() => router.push('/coins')} style={styles.coinPill}>
+                <Ionicons name="logo-bitcoin" size={16} color={Theme.warn} />
                 <Text style={styles.coinText}>{state.coins}</Text>
               </Pressable>
 
               <View style={styles.topActionGroup}>
                 <Pressable onPress={() => router.push('/settings')} style={styles.topActionBtn}>
-                  <Text style={styles.topActionIcon}>⚙️</Text>
+                  <Ionicons name="settings" size={18} color={Theme.primary} />
                 </Pressable>
 
                 <Pressable onPress={() => router.push('/leaderboard')} style={styles.topActionBtn}>
-                  <Text style={styles.topActionIcon}>🏆</Text>
+                  <Ionicons name="trophy" size={18} color={Theme.warn} />
                 </Pressable>
 
                 <Pressable onPress={() => router.push('/friends')} style={styles.topActionBtn}>
-                  <Text style={styles.topActionIcon}>👥</Text>
+                  <Ionicons name="people" size={18} color={Theme.primary} />
                 </Pressable>
 
                 <Pressable onPress={() => router.push('/battle')} style={styles.topActionBtn}>
-                  <Text style={styles.topActionIcon}>⚔️</Text>
+                  <Ionicons name="flash" size={18} color={Theme.danger} />
                 </Pressable>
 
                 <Pressable onPress={() => router.push('/profile')} style={styles.topActionBtn}>
-                  <Text style={styles.topActionIcon}>👤</Text>
+                  <Ionicons name="person" size={18} color={Theme.textDim} />
                 </Pressable>
               </View>
             </View>
@@ -1028,7 +1033,7 @@ export default function Levels() {
           >
             <View style={styles.levelHeader}>
               <Pressable onPress={backToCategories} style={styles.backBtn}>
-                <Text style={styles.backText}>‹</Text>
+                <Ionicons name="chevron-back" size={22} color="#fff" />
               </Pressable>
 
               <View style={styles.levelHeaderIcon}>
@@ -1044,16 +1049,16 @@ export default function Levels() {
 
               <View style={styles.headerActions}>
                 <Pressable onPress={() => router.push('/shop')} style={styles.headerCoinPill}>
-                  <Text style={styles.headerCoinIcon}>🪙</Text>
+                  <Ionicons name="logo-bitcoin" size={13} color="#9c096d" />
                   <Text style={styles.headerCoinText}>{state.coins}</Text>
                 </Pressable>
 
                 <Pressable onPress={() => router.push('/settings')} style={styles.headerActionBtn}>
-                  <Text style={styles.headerActionIcon}>⚙️</Text>
+                  <Ionicons name="settings" size={16} color="#fff" />
                 </Pressable>
 
                 <Pressable onPress={() => router.push('/battle')} style={styles.headerActionBtn}>
-                  <Text style={styles.headerActionIcon}>⚔️</Text>
+                  <Ionicons name="flash" size={16} color="#fff" />
                 </Pressable>
               </View>
             </View>
@@ -1117,7 +1122,10 @@ export default function Levels() {
                           }}
                           style={[styles.levelMiniBtn, styles.levelBattleBtn]}
                         >
-                          <Text style={styles.levelMiniBtnText}>⚔️ BATTLE</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="flash" size={12} color="#0D0500" />
+                            <Text style={[styles.levelMiniBtnText, { color: '#0D0500' }]}>BATTLE</Text>
+                          </View>
                         </Pressable>
                       </View>
                     )}
@@ -1135,11 +1143,29 @@ export default function Levels() {
 const styles = StyleSheet.create({
   bg: {
     flex: 1,
-    backgroundColor: '#dff7ff',
+    backgroundColor: '#0D0500',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(226, 246, 255, 0.34)',
+    backgroundColor: 'rgba(13,5,0,0.82)',
+  },
+  orb1: {
+    position: 'absolute',
+    top: -60,
+    left: -60,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(255,100,0,0.13)',
+  },
+  orb2: {
+    position: 'absolute',
+    bottom: 80,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,60,0,0.09)',
   },
   safeArea: {
     flex: 1,
@@ -1171,25 +1197,20 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     paddingHorizontal: 8,
-    backgroundColor: '#fff4d8',
-    borderWidth: 1.5,
-    borderColor: '#d8cba9',
+    ...GlassEffects.medium,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
+    shadowColor: Theme.warn,
+    shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 5 },
     shadowRadius: 7,
     elevation: 6,
     flexShrink: 0,
   },
-  coinIcon: {
-    fontSize: 17,
-  },
   coinText: {
-    color: '#9c096d',
+    color: Theme.warn,
     fontSize: 13,
     fontWeight: '900',
   },
@@ -1197,20 +1218,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#fff4d8',
-    borderWidth: 1.5,
-    borderColor: '#d8cba9',
+    ...GlassEffects.light,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
+    shadowColor: Theme.primary,
+    shadowOpacity: 0.2,
     shadowOffset: { width: 0, height: 5 },
     shadowRadius: 7,
     elevation: 6,
     flexShrink: 0,
-  },
-  topActionIcon: {
-    fontSize: 18,
   },
   headerActions: {
     flexDirection: 'row',
@@ -1237,9 +1253,6 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 5,
   },
-  headerCoinIcon: {
-    fontSize: 13,
-  },
   headerCoinText: {
     color: '#9c096d',
     fontSize: 12,
@@ -1259,9 +1272,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 5,
     elevation: 5,
-  },
-  headerActionIcon: {
-    fontSize: 16,
   },
   titlePill: {
     borderRadius: 999,
@@ -1304,20 +1314,18 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 50,
     borderRadius: 22,
-    backgroundColor: '#f4e6cf',
-    borderWidth: 1.4,
-    borderColor: '#c7b9a2',
+    ...GlassEffects.light,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
+    shadowColor: Theme.primary,
+    shadowOpacity: 0.15,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 5,
     elevation: 5,
     position: 'relative',
   },
   diffBtnText: {
-    color: '#c01882',
+    color: Theme.primary,
     fontSize: 13,
     fontWeight: '900',
   },
@@ -1327,7 +1335,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#c01882',
+    backgroundColor: Theme.primary,
   },
   categoryGrid: {
     flexDirection: 'row',
@@ -1337,16 +1345,14 @@ const styles = StyleSheet.create({
   categoryCard: {
     minHeight: 176,
     borderRadius: 14,
-    backgroundColor: '#fff4d8',
-    borderWidth: 1.4,
-    borderColor: '#d8cba9',
+    ...GlassEffects.medium,
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 14,
     paddingBottom: 13,
     paddingHorizontal: 9,
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
+    shadowColor: Theme.primary,
+    shadowOpacity: 0.2,
     shadowOffset: { width: 0, height: 5 },
     shadowRadius: 7,
     elevation: 7,
@@ -1354,26 +1360,25 @@ const styles = StyleSheet.create({
   },
   progressTop: {
     width: '100%',
-    height: 18,
-    justifyContent: 'center',
-    marginBottom: 6,
+    position: 'relative',
+    marginBottom: 4,
   },
   progressTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: '#c7eaa9',
+    backgroundColor: 'rgba(76,195,138,0.2)',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#35b845',
+    backgroundColor: Theme.success,
   },
   progressBadge: {
     position: 'absolute',
     right: -4,
     top: -5,
-    backgroundColor: '#4eb83f',
+    backgroundColor: Theme.success,
     borderRadius: 999,
     paddingHorizontal: 6,
     paddingVertical: 3,
@@ -1452,12 +1457,6 @@ const styles = StyleSheet.create({
     elevation: 5,
     flexShrink: 0,
   },
-  backText: {
-    color: '#fff',
-    fontSize: 31,
-    fontWeight: '900',
-    marginTop: -4,
-  },
   levelHeaderIcon: {
     width: 54,
     height: 54,
@@ -1487,22 +1486,13 @@ const styles = StyleSheet.create({
   },
   levelCard: {
     borderRadius: 24,
-    backgroundColor: 'rgba(255,244,216,0.98)',
-    borderWidth: 1.3,
-    borderColor: '#dfd1ad',
+    ...GlassEffects.medium,
     padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-       shadowOffset: { width: 0, height: 4 },
+    shadowColor: Theme.primary,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12,
     elevation: 5,
-  },
-  levelCardDone: {
-    borderColor: '#9fd6b0',
-    backgroundColor: 'rgba(220,255,235,0.98)',
-  },
-  levelCardLocked: {
-    opacity: 0.55,
   },
   levelCardTop: {
     flexDirection: 'row',
@@ -1510,18 +1500,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
+  levelCardDone: {
+    borderColor: 'rgba(76,195,138,0.4)',
+    backgroundColor: 'rgba(76,195,138,0.1)',
+  },
+  levelCardLocked: {
+    opacity: 0.55,
+  },
   levelNumberCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#fff',
+    backgroundColor: Theme.primary,
     borderWidth: 1.5,
-    borderColor: '#e0d2a8',
+    borderColor: 'rgba(255,150,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   levelNumber: {
-    color: '#2e2f3d',
+    color: '#fff',
     fontWeight: '900',
     fontSize: 16,
   },
@@ -1529,23 +1526,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(76,195,138,0.2)',
     borderWidth: 1,
-    borderColor: '#e0d2a8',
+    borderColor: 'rgba(76,195,138,0.3)',
   },
   levelStatusText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#697083',
+    color: Theme.success,
   },
   levelCardTitle: {
-    color: '#2e2f3d',
+    color: '#fff',
     fontSize: 15,
     fontWeight: '900',
     marginBottom: 2,
   },
   levelCardMeta: {
-    color: '#697083',
+    color: Theme.textDim,
     fontSize: 11,
     fontWeight: '700',
     marginBottom: 10,
@@ -1553,17 +1550,17 @@ const styles = StyleSheet.create({
   levelProgressTrack: {
     height: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: 'rgba(76,195,138,0.2)',
     overflow: 'hidden',
     marginBottom: 6,
   },
   levelProgressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#4CC38A',
+    backgroundColor: Theme.success,
   },
   levelFoundText: {
-    color: '#697083',
+    color: Theme.textDim,
     fontSize: 11,
     fontWeight: '700',
     marginBottom: 12,
@@ -1576,7 +1573,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 36,
     borderRadius: 12,
-    backgroundColor: '#5B9BFF',
+    backgroundColor: Theme.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

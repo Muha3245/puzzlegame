@@ -2,21 +2,22 @@
 // Root Stack + full-app background music controller.
 
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { playRelaxMusic } from '../lib/audio';
+import { playRelaxMusic, getScreenMusicTheme } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 
 export default function RootLayout() {
   const { state } = useAppState();
+  const navigationState = useRootNavigationState();
+
+  const currentRoute = navigationState?.routes[navigationState.routes.length - 1]?.name || 'index';
 
   useEffect(() => {
-    playRelaxMusic(state.settings.music, state.settings.musicTheme);
-
-    return () => {
-      playRelaxMusic(false);
-    };
-  }, [state.settings.music, state.settings.musicTheme]);
+    const screenTheme = getScreenMusicTheme(currentRoute);
+    const themeToPlay = state.settings.musicTheme === 'relax' ? screenTheme : state.settings.musicTheme;
+    playRelaxMusic(state.settings.music, themeToPlay, state.settings.musicVolume ?? 0.5);
+  }, [state.settings.music, state.settings.musicTheme, state.settings.musicVolume, currentRoute]);
 
   return (
     <>
@@ -25,7 +26,7 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#0A1230' },
+          contentStyle: { backgroundColor: '#0D0500' },
         }}
       >
         <Stack.Screen name="index" />
@@ -37,7 +38,8 @@ export default function RootLayout() {
         <Stack.Screen name="leaderboard" />
         <Stack.Screen name="login" />
         <Stack.Screen name="shop" options={{ presentation: 'transparentModal', animation: 'fade' }} />
-        <Stack.Screen name="settings" options={{ presentation: 'transparentModal', animation: 'fade' }} />
+        <Stack.Screen name="coins" options={{ animationEnabled: true }} />
+        <Stack.Screen name="settings" options={{ animationEnabled: true }} />
         <Stack.Screen name="help" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         <Stack.Screen name="winner" />
       </Stack>

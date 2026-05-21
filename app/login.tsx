@@ -1,6 +1,6 @@
 // app/login.tsx
-// Beautiful login / register screen — full-bleed background image + glass card.
 
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
@@ -18,13 +18,34 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Path, Polygon, Rect } from 'react-native-svg';
 import { loginAsGuest, loginWithEmail, registerWithEmail } from '../lib/online';
+import { Theme } from '../constants/theme';
 
-// Unsplash galaxy / cosmic background — dark and rich
 const BG_URI =
-  'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?auto=format&fit=crop&w=1200&q=90';
+  'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80';
 
 type Mode = 'login' | 'register';
+
+// SVG logo icon — puzzle piece / word grid
+function LogoIcon({ size = 48 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      {/* Grid squares */}
+      <Rect x="10" y="10" width="30" height="30" rx="6" fill={Theme.primary} />
+      <Rect x="60" y="10" width="30" height="30" rx="6" fill={Theme.warn} opacity="0.9" />
+      <Rect x="10" y="60" width="30" height="30" rx="6" fill={Theme.success} opacity="0.85" />
+      <Rect x="60" y="60" width="30" height="30" rx="6" fill={Theme.primary} opacity="0.7" />
+      {/* Center connector */}
+      <Rect x="44" y="44" width="12" height="12" rx="3" fill="#fff" opacity="0.9" />
+      {/* Letter dots */}
+      <Circle cx="25" cy="25" r="6" fill="#fff" opacity="0.85" />
+      <Circle cx="75" cy="25" r="6" fill="#fff" opacity="0.85" />
+      <Circle cx="25" cy="75" r="6" fill="#fff" opacity="0.85" />
+      <Circle cx="75" cy="75" r="6" fill="#fff" opacity="0.85" />
+    </Svg>
+  );
+}
 
 export default function LoginScreen() {
   const [mode, setMode] = useState<Mode>('login');
@@ -34,7 +55,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
 
-  // Subtle press animation on primary button
   const btnScale = useRef(new Animated.Value(1)).current;
   const pressIn  = () => Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true }).start();
   const pressOut = () => Animated.spring(btnScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
@@ -73,36 +93,29 @@ export default function LoginScreen() {
 
   const toggleMode = () => {
     setMode((m) => (m === 'login' ? 'register' : 'login'));
-    setName('');
-    setEmail('');
-    setPassword('');
+    setName(''); setEmail(''); setPassword('');
   };
 
   const isLogin = mode === 'login';
 
   return (
     <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
-      {/* Deep tinted overlay */}
       <View style={styles.overlay} />
-
-      {/* Floating accent orbs for depth */}
       <View style={styles.orb1} />
       <View style={styles.orb2} />
+      <View style={styles.orb3} />
 
       <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
-          style={styles.kav}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        <KeyboardAvoidingView style={styles.kav} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* ── Logo / brand ── */}
+            {/* ── Brand ── */}
             <View style={styles.brand}>
               <View style={styles.logoRing}>
-                <Text style={styles.logoEmoji}>🧩</Text>
+                <LogoIcon size={48} />
               </View>
               <Text style={styles.appName}>WordPuzzle</Text>
               <Text style={styles.tagline}>Train your mind, one word at a time</Text>
@@ -110,24 +123,20 @@ export default function LoginScreen() {
 
             {/* ── Glass card ── */}
             <View style={styles.card}>
-              {/* Tab switcher */}
+              {/* Mode tabs */}
               <View style={styles.tabRow}>
-                <Pressable
-                  onPress={() => setMode('login')}
-                  style={[styles.tab, isLogin && styles.tabActive]}
-                >
+                <Pressable onPress={() => setMode('login')} style={[styles.tab, isLogin && styles.tabActive]}>
+                  <Ionicons name="log-in-outline" size={14} color={isLogin ? Theme.primary : Theme.textMute} />
                   <Text style={[styles.tabText, isLogin && styles.tabTextActive]}>Sign In</Text>
                 </Pressable>
-                <Pressable
-                  onPress={() => setMode('register')}
-                  style={[styles.tab, !isLogin && styles.tabActive]}
-                >
+                <Pressable onPress={() => setMode('register')} style={[styles.tab, !isLogin && styles.tabActive]}>
+                  <Ionicons name="person-add-outline" size={14} color={!isLogin ? Theme.primary : Theme.textMute} />
                   <Text style={[styles.tabText, !isLogin && styles.tabTextActive]}>Create Account</Text>
                 </Pressable>
               </View>
 
               <Text style={styles.cardTitle}>
-                {isLogin ? 'Welcome back 👋' : 'Join the game 🚀'}
+                {isLogin ? 'Welcome back' : 'Join the game'}
               </Text>
               <Text style={styles.cardSub}>
                 {isLogin
@@ -135,17 +144,17 @@ export default function LoginScreen() {
                   : 'Register to save progress & join leaderboard'}
               </Text>
 
-              {/* Name field — register only */}
+              {/* Name — register only */}
               {!isLogin && (
                 <View style={styles.fieldWrap}>
                   <Text style={styles.label}>Player Name</Text>
                   <View style={styles.inputRow}>
-                    <Text style={styles.inputIcon}>🎮</Text>
+                    <Ionicons name="game-controller-outline" size={18} color={Theme.textDim} />
                     <TextInput
                       value={name}
                       onChangeText={setName}
                       placeholder="Enter your player name"
-                      placeholderTextColor="rgba(164,176,216,0.5)"
+                      placeholderTextColor="rgba(200,168,122,0.5)"
                       style={styles.input}
                       autoCapitalize="words"
                     />
@@ -153,16 +162,16 @@ export default function LoginScreen() {
                 </View>
               )}
 
-              {/* Email field */}
+              {/* Email */}
               <View style={styles.fieldWrap}>
                 <Text style={styles.label}>Email</Text>
                 <View style={styles.inputRow}>
-                  <Text style={styles.inputIcon}>✉️</Text>
+                  <Ionicons name="mail-outline" size={18} color={Theme.textDim} />
                   <TextInput
                     value={email}
                     onChangeText={setEmail}
                     placeholder="your@email.com"
-                    placeholderTextColor="rgba(164,176,216,0.5)"
+                    placeholderTextColor="rgba(200,168,122,0.5)"
                     style={styles.input}
                     autoCapitalize="none"
                     keyboardType="email-address"
@@ -171,22 +180,26 @@ export default function LoginScreen() {
                 </View>
               </View>
 
-              {/* Password field */}
+              {/* Password */}
               <View style={styles.fieldWrap}>
                 <Text style={styles.label}>Password</Text>
                 <View style={styles.inputRow}>
-                  <Text style={styles.inputIcon}>🔒</Text>
+                  <Ionicons name="lock-closed-outline" size={18} color={Theme.textDim} />
                   <TextInput
                     value={password}
                     onChangeText={setPassword}
                     placeholder={isLogin ? '••••••••' : 'Min 6 characters'}
-                    placeholderTextColor="rgba(164,176,216,0.5)"
+                    placeholderTextColor="rgba(200,168,122,0.5)"
                     style={[styles.input, { flex: 1 }]}
                     secureTextEntry={!showPw}
                     autoCorrect={false}
                   />
                   <Pressable onPress={() => setShowPw((v) => !v)} style={styles.eyeBtn}>
-                    <Text style={styles.eyeIcon}>{showPw ? '🙈' : '👁️'}</Text>
+                    <Ionicons
+                      name={showPw ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={Theme.textDim}
+                    />
                   </Pressable>
                 </View>
               </View>
@@ -204,10 +217,15 @@ export default function LoginScreen() {
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <>
+                      <Ionicons
+                        name={isLogin ? 'log-in' : 'person-add'}
+                        size={18}
+                        color="#fff"
+                      />
                       <Text style={styles.primaryText}>
                         {isLogin ? 'Sign In' : 'Create Account'}
                       </Text>
-                      <Text style={styles.primaryArrow}>→</Text>
+                      <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.8)" />
                     </>
                   )}
                 </Pressable>
@@ -220,14 +238,14 @@ export default function LoginScreen() {
                 <View style={styles.dividerLine} />
               </View>
 
-              {/* Guest play */}
+              {/* Guest */}
               <Pressable onPress={guestLogin} disabled={loading} style={styles.guestBtn}>
-                <Text style={styles.guestIcon}>👻</Text>
+                <Ionicons name="person-outline" size={18} color={Theme.textDim} />
                 <Text style={styles.guestText}>Play as Guest</Text>
               </Pressable>
             </View>
 
-            {/* Switch mode link */}
+            {/* Switch mode */}
             <Pressable onPress={toggleMode} style={styles.switchRow}>
               <Text style={styles.switchText}>
                 {isLogin ? "Don't have an account? " : 'Already have an account? '}
@@ -242,244 +260,77 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#050c20' },
-
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(5, 8, 32, 0.72)',
-  },
-
-  // Glowing accent orbs
-  orb1: {
-    position: 'absolute',
-    top: -80,
-    left: -80,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(91, 155, 255, 0.15)',
-  },
-  orb2: {
-    position: 'absolute',
-    bottom: -60,
-    right: -60,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: 'rgba(233, 75, 140, 0.12)',
-  },
-
+  bg: { flex: 1, backgroundColor: '#0D0500' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(13,5,0,0.80)' },
+  orb1: { position: 'absolute', top: -80, left: -80, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,100,0,0.14)' },
+  orb2: { position: 'absolute', bottom: -60, right: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(255,60,0,0.10)' },
+  orb3: { position: 'absolute', top: '40%', left: '25%', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,180,0,0.06)' },
   safe: { flex: 1 },
   kav: { flex: 1 },
 
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 22,
-    paddingVertical: 32,
-  },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 22, paddingVertical: 32 },
 
-  // ── Brand / logo ──
+  // Brand
   brand: { alignItems: 'center', marginBottom: 28 },
-
   logoRing: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: 'rgba(91,155,255,0.15)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(91,155,255,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 84, height: 84, borderRadius: 24,
+    backgroundColor: 'rgba(255,120,0,0.14)',
+    borderWidth: 1.5, borderColor: 'rgba(255,150,0,0.40)',
+    alignItems: 'center', justifyContent: 'center',
     marginBottom: 12,
-    shadowColor: '#5B9BFF',
-    shadowOpacity: 0.4,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 20,
-    elevation: 10,
+    shadowColor: Theme.primary, shadowOpacity: 0.45,
+    shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, elevation: 10,
   },
-  logoEmoji: { fontSize: 38 },
-
   appName: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: '900',
-    letterSpacing: 1,
-    textShadowColor: 'rgba(91,155,255,0.6)',
+    color: '#fff', fontSize: 32, fontWeight: '900', letterSpacing: 1,
+    textShadowColor: 'rgba(255,120,0,0.55)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 12,
   },
-  tagline: {
-    marginTop: 6,
-    color: 'rgba(164,176,216,0.8)',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
+  tagline: { marginTop: 6, color: Theme.textDim, fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
 
-  // ── Glass card ──
+  // Glass card
   card: {
     borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.13)',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,150,0,0.22)',
     padding: 22,
-    // iOS glass shadow
-    shadowColor: '#000',
-    shadowOpacity: 0.45,
-    shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 32,
-    elevation: 14,
+    shadowColor: '#000', shadowOpacity: 0.5,
+    shadowOffset: { width: 0, height: 12 }, shadowRadius: 32, elevation: 14,
   },
 
-  // ── Mode tabs ──
-  tabRow: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 20,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 11,
-    alignItems: 'center',
-  },
-  tabActive: {
-    backgroundColor: 'rgba(91,155,255,0.25)',
-    borderWidth: 1,
-    borderColor: 'rgba(91,155,255,0.4)',
-  },
-  tabText: {
-    color: 'rgba(164,176,216,0.6)',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  tabTextActive: {
-    color: '#5B9BFF',
-    fontWeight: '900',
-  },
+  // Tabs
+  tabRow: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: 4, marginBottom: 20 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: 11 },
+  tabActive: { backgroundColor: 'rgba(255,120,0,0.22)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.40)' },
+  tabText: { color: Theme.textMute, fontWeight: '700', fontSize: 13 },
+  tabTextActive: { color: Theme.primary, fontWeight: '900' },
 
-  cardTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  cardSub: {
-    color: 'rgba(164,176,216,0.7)',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 20,
-    lineHeight: 18,
-  },
+  cardTitle: { color: '#fff', fontSize: 22, fontWeight: '900', marginBottom: 4 },
+  cardSub: { color: Theme.textDim, fontSize: 13, fontWeight: '600', marginBottom: 20, lineHeight: 18 },
 
-  // ── Input fields ──
+  // Inputs
   fieldWrap: { marginBottom: 14 },
-  label: {
-    color: 'rgba(164,176,216,0.85)',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: 14,
-    minHeight: 50,
-    gap: 8,
-  },
-  inputIcon: { fontSize: 16 },
-  input: {
-    flex: 1,
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-    paddingVertical: 12,
-  },
+  label: { color: Theme.textDim, fontSize: 12, fontWeight: '800', letterSpacing: 0.8, marginBottom: 6, textTransform: 'uppercase' },
+  inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,150,0,0.20)', paddingHorizontal: 14, minHeight: 50, gap: 8 },
+  input: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 15, paddingVertical: 12 },
   eyeBtn: { padding: 4 },
-  eyeIcon: { fontSize: 16 },
 
-  // ── Primary button ──
-  primaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#5B9BFF',
-    borderRadius: 18,
-    paddingVertical: 16,
-    shadowColor: '#5B9BFF',
-    shadowOpacity: 0.55,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 18,
-    elevation: 8,
-  },
-  primaryText: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 16,
-    letterSpacing: 0.3,
-  },
-  primaryArrow: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-  },
+  // Primary button
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Theme.primary, borderRadius: 18, paddingVertical: 16, shadowColor: Theme.primary, shadowOpacity: 0.55, shadowOffset: { width: 0, height: 8 }, shadowRadius: 18, elevation: 8 },
+  primaryText: { color: '#fff', fontWeight: '900', fontSize: 16, letterSpacing: 0.3 },
 
-  // ── Divider ──
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginVertical: 18,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  dividerText: {
-    color: 'rgba(164,176,216,0.5)',
-    fontWeight: '700',
-    fontSize: 12,
-  },
+  // Divider
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 18 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,150,0,0.15)' },
+  dividerText: { color: Theme.textMute, fontWeight: '700', fontSize: 12 },
 
-  // ── Guest button ──
-  guestBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 18,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  guestIcon: { fontSize: 18 },
-  guestText: {
-    color: 'rgba(164,176,216,0.85)',
-    fontWeight: '800',
-    fontSize: 15,
-  },
+  // Guest
+  guestBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 18, paddingVertical: 14, borderWidth: 1, borderColor: 'rgba(255,150,0,0.16)' },
+  guestText: { color: Theme.textDim, fontWeight: '800', fontSize: 15 },
 
-  // ── Switch mode ──
+  // Switch
   switchRow: { alignItems: 'center', marginTop: 22 },
-  switchText: {
-    color: 'rgba(164,176,216,0.7)',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  switchLink: {
-    color: '#5B9BFF',
-    fontWeight: '900',
-  },
+  switchText: { color: Theme.textDim, fontSize: 14, fontWeight: '600' },
+  switchLink: { color: Theme.primary, fontWeight: '900' },
 });

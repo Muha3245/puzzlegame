@@ -8,7 +8,7 @@ import { Splash } from '../components/Splash';
 
 export default function Index() {
   return (
-    <View style={{ flex: 1, backgroundColor: '#0A1230' }}>
+    <View style={{ flex: 1, backgroundColor: '#0D0500' }}>
       <Splash onDone={() => router.replace('/levels')} />
     </View>
   );

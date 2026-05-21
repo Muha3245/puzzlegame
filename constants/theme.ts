@@ -1,22 +1,22 @@
 // constants/theme.ts
-// Shared color tokens and gradients for the dark navy aesthetic.
+// Dark orange gaming palette — replaces the old dark-navy/blue aesthetic.
 
 export const Theme = {
-  // Backgrounds
-  bg:        '#0A1230',
-  bgMid:     '#0E1838',
-  bgUp:      '#1B2A5E',
-  surface:   '#101C46',
-  surface2:  '#1A2552',
+  // Backgrounds (warm charcoal-black)
+  bg:        '#0D0500',
+  bgMid:     '#130700',
+  bgUp:      '#221100',
+  surface:   '#180800',
+  surface2:  '#240D00',
 
   // Text
   text:      '#FFFFFF',
-  textDim:   '#A4B0D8',
-  textMute:  '#5C6796',
+  textDim:   '#C8A87A',
+  textMute:  '#7A5230',
 
-  // Accents
-  primary:   '#5B9BFF',
-  primaryDk: '#3578F0',
+  // Accents — orange replaces blue
+  primary:   '#FF7A00',
+  primaryDk: '#E06000',
   success:   '#4CC38A',
   warn:      '#FFD23F',
   warnDk:    '#FF9F43',
@@ -24,12 +24,30 @@ export const Theme = {
   pink:      '#E94B8C',
 
   // Strokes
-  divider:   'rgba(255,255,255,0.08)',
-  card:      'rgba(255,255,255,0.04)',
+  divider:   'rgba(255,150,0,0.10)',
+  card:      'rgba(255,150,0,0.04)',
 };
 
-// Expo template compatibility tokens. These keep the unused tab/template files compiling
-// while the main game screens continue using `Theme` above.
+// Glassmorphism presets — white base with warm orange borders
+export const GlassEffects = {
+  light: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor:     'rgba(255,150,0,0.18)',
+    borderWidth: 1,
+  },
+  medium: {
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderColor:     'rgba(255,150,0,0.26)',
+    borderWidth: 1,
+  },
+  strong: {
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderColor:     'rgba(255,150,0,0.38)',
+    borderWidth: 1,
+  },
+};
+
+// Expo template compatibility tokens
 export const Colors = {
   light: {
     text: '#11181C',

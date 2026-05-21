@@ -4,7 +4,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -29,6 +29,9 @@ import {
   rejectBattleRoom,
   subscribeToMyBattleList,
 } from '../lib/online';
+import { notifyBattleRequest } from '../lib/notifications';
+import { AnimatedEntry } from '../components/AnimatedEntry';
+import { SkeletonCard, SkeletonSection } from '../components/SkeletonLoader';
 
 const BG_URI = 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?auto=format&fit=crop&w=1200&q=90';
 
@@ -67,6 +70,7 @@ export default function BattleArena() {
   const [rooms, setRooms] = useState<RoomBucket>(emptyBuckets);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const prevIncomingRef = useRef<string[]>([]);
 
   const totalBadge = rooms.incoming.length + rooms.active.length;
 
@@ -100,6 +104,18 @@ export default function BattleArena() {
       return () => cleanup?.();
     }, [load]),
   );
+
+  // Notify user when a new battle request arrives
+  useEffect(() => {
+    const currentIds = rooms.incoming.map((r) => r.id);
+    const prev = prevIncomingRef.current;
+    const newRooms = rooms.incoming.filter((r) => !prev.includes(r.id));
+    newRooms.forEach((r) => {
+      const senderName = uid === r.player1Id ? r.player2Name : r.player1Name;
+      notifyBattleRequest(senderName).catch(() => {});
+    });
+    prevIncomingRef.current = currentIds;
+  }, [rooms.incoming, uid]);
 
   const challenge = async (friend: PublicUser) => {
     if (!hasSelectedLevel) {
@@ -225,6 +241,8 @@ export default function BattleArena() {
   return (
     <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
       <View style={styles.overlay} />
+      <View style={styles.orb1} />
+      <View style={styles.orb2} />
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
@@ -243,10 +261,16 @@ export default function BattleArena() {
         </View>
 
         {loading ? (
-          <View style={styles.center}><ActivityIndicator color={Theme.primary} size="large" /></View>
+          <View style={{ paddingHorizontal: 18, paddingTop: 8 }}>
+            <SkeletonSection />
+            {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={`in-${i}`} />)}
+            <SkeletonSection />
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={`fr-${i}`} />)}
+          </View>
         ) : (
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             {!hasSelectedLevel && (
+              <AnimatedEntry from="bottom" delay={0}>
               <View style={styles.infoCard}>
                 <View style={styles.infoIconRow}>
                   <Ionicons name="flash" size={22} color={Theme.warn} />
@@ -260,11 +284,16 @@ export default function BattleArena() {
                   <Text style={styles.primaryBtnText}>Choose Level</Text>
                 </Pressable>
               </View>
+              </AnimatedEntry>
             )}
 
             {/* Battle twists explainer */}
+            <AnimatedEntry from="bottom" delay={60}>
             <View style={styles.twistsCard}>
-              <Text style={styles.twistsTitle}>⚡ Battle Twists</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                <Ionicons name="flash" size={16} color={Theme.warn} />
+                <Text style={styles.twistsTitle}>Battle Twists</Text>
+              </View>
               <Text style={styles.twistsSubtitle}>Use in-game power-ups to gain the edge</Text>
               <View style={styles.twistsList}>
                 {[
@@ -288,11 +317,13 @@ export default function BattleArena() {
                 ))}
               </View>
             </View>
+            </AnimatedEntry>
 
+            <AnimatedEntry from="bottom" delay={120}>
             <Section title="Incoming Battle Requests" count={rooms.incoming.length} />
-            {rooms.incoming.length === 0 ? <Empty text="No incoming battles" /> : rooms.incoming.map((room) => (
+            {rooms.incoming.length === 0 ? <Empty text="No incoming battles" /> : rooms.incoming.map((room, i) => (
+              <AnimatedEntry key={room.id} delay={i * 55}>
               <RoomCard
-                key={room.id}
                 room={room}
                 uid={uid}
                 busy={busyId === room.id}
@@ -303,12 +334,15 @@ export default function BattleArena() {
                   </View>
                 }
               />
+              </AnimatedEntry>
             ))}
+            </AnimatedEntry>
 
+            <AnimatedEntry from="bottom" delay={180}>
             <Section title="Active Live Battles" count={rooms.active.length} />
-            {rooms.active.length === 0 ? <Empty text="No active battle room" /> : rooms.active.map((room) => (
+            {rooms.active.length === 0 ? <Empty text="No active battle room" /> : rooms.active.map((room, i) => (
+              <AnimatedEntry key={room.id} delay={i * 55}>
               <RoomCard
-                key={room.id}
                 room={room}
                 uid={uid}
                 busy={busyId === room.id}
@@ -318,11 +352,15 @@ export default function BattleArena() {
                   </Pressable>
                 }
               />
+              </AnimatedEntry>
             ))}
+            </AnimatedEntry>
 
+            <AnimatedEntry from="bottom" delay={240}>
             <Section title="Challenge Friends" count={friends.length} />
-            {friends.length === 0 ? <Empty text="Add friends first, then start battles here." /> : friends.map((friend) => (
-              <View key={friend.uid} style={styles.friendCard}>
+            {friends.length === 0 ? <Empty text="Add friends first, then start battles here." /> : friends.map((friend, i) => (
+              <AnimatedEntry key={friend.uid} delay={i * 50}>
+              <View style={styles.friendCard}>
                 <View style={styles.avatar}><Text style={styles.avatarText}>{initials(friend.displayName)}</Text></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{friend.displayName}</Text>
@@ -332,19 +370,24 @@ export default function BattleArena() {
                   {busyId === friend.uid ? <ActivityIndicator color="#fff" /> : <Text style={styles.challengeText}>Battle</Text>}
                 </Pressable>
               </View>
+              </AnimatedEntry>
             ))}
+            </AnimatedEntry>
 
+            <AnimatedEntry from="bottom" delay={300}>
             <Section title="Completed Battles" count={rooms.completed.length} />
-            {rooms.completed.length === 0 ? <Empty text="Completed battles will appear here." /> : rooms.completed.slice(0, 15).map((room) => (
+            {rooms.completed.length === 0 ? <Empty text="Completed battles will appear here." /> : rooms.completed.slice(0, 15).map((room, i) => (
+              <AnimatedEntry key={room.id} delay={i * 50}>
               <CompletedRoomCard
-                key={room.id}
                 room={room}
                 uid={uid}
                 onRematch={() => rematch(room)}
                 onNext={() => nextLevelBattle(room)}
                 busy={busyId === room.id}
               />
+              </AnimatedEntry>
             ))}
+            </AnimatedEntry>
 
             <View style={{ height: 40 }} />
           </ScrollView>
@@ -407,55 +450,57 @@ function CompletedRoomCard({ room, uid, onRematch, onNext, busy }: { room: Battl
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#050c20' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,8,32,0.82)' },
+  bg: { flex: 1, backgroundColor: '#0D0500' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(13,5,0,0.82)' },
+  orb1: { position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,100,0,0.13)' },
+  orb2: { position: 'absolute', bottom: 40, left: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,60,0,0.09)' },
   safe: { flex: 1 },
   header: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  backBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.11)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  backBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,120,0,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,150,0,0.25)' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { color: '#fff', fontSize: 24, fontWeight: '900' },
-  sub: { color: 'rgba(220,229,255,0.72)', marginTop: 2, fontWeight: '700' },
+  sub: { color: Theme.textDim, marginTop: 2, fontWeight: '700' },
   bigBadge: { minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 7, backgroundColor: '#ff3b69', alignItems: 'center', justifyContent: 'center' },
   bigBadgeText: { color: '#fff', fontWeight: '900', fontSize: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: 18, paddingBottom: 20 },
-  infoCard: { padding: 18, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.11)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', marginBottom: 16 },
+  infoCard: { padding: 18, borderRadius: 26, backgroundColor: 'rgba(255,120,0,0.10)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.22)', marginBottom: 16 },
   infoIconRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   infoTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  infoText: { color: 'rgba(220,229,255,0.75)', lineHeight: 20, marginBottom: 14 },
+  infoText: { color: Theme.textDim, lineHeight: 20, marginBottom: 14 },
 
-  twistsCard: { padding: 18, borderRadius: 26, backgroundColor: 'rgba(91,155,255,0.08)', borderWidth: 1, borderColor: 'rgba(91,155,255,0.22)', marginBottom: 16 },
-  twistsTitle: { color: '#fff', fontSize: 16, fontWeight: '900', marginBottom: 3 },
+  twistsCard: { padding: 18, borderRadius: 26, backgroundColor: 'rgba(255,120,0,0.08)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.22)', marginBottom: 16 },
+  twistsTitle: { color: '#fff', fontSize: 16, fontWeight: '900' },
   twistsSubtitle: { color: Theme.textDim, fontSize: 12, marginBottom: 14, fontWeight: '700' },
   twistsList: { gap: 10 },
   twistItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  twistIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(91,155,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  twistIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,120,0,0.18)', alignItems: 'center', justifyContent: 'center' },
   twistItemLabel: { color: '#fff', fontSize: 13, fontWeight: '900' },
   twistItemDesc: { color: Theme.textDim, fontSize: 11, fontWeight: '700', marginTop: 1 },
   twistCostBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(255,210,63,0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,210,63,0.3)' },
   twistCostText: { color: Theme.warn, fontSize: 11, fontWeight: '900' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 18, marginBottom: 10, gap: 8 },
   sectionTitle: { color: '#fff', fontWeight: '900', fontSize: 16 },
-  sectionBadge: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7 },
-  sectionBadgeText: { color: '#fff', fontWeight: '900', fontSize: 12 },
-  empty: { color: 'rgba(220,229,255,0.55)', padding: 14, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.07)', overflow: 'hidden' },
-  friendCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.13)', marginBottom: 10 },
-  roomCard: { padding: 14, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.13)', marginBottom: 10 },
+  sectionBadge: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,120,0,0.20)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7, borderWidth: 1, borderColor: 'rgba(255,150,0,0.30)' },
+  sectionBadgeText: { color: Theme.primary, fontWeight: '900', fontSize: 12 },
+  empty: { color: Theme.textDim, padding: 14, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.07)', overflow: 'hidden' },
+  friendCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.18)', marginBottom: 10 },
+  roomCard: { padding: 14, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.18)', marginBottom: 10 },
   roomTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(91,155,255,0.25)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,120,0,0.22)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.35)' },
   goldAvatar: { backgroundColor: 'rgba(255,190,55,0.35)' },
   avatarText: { color: '#fff', fontWeight: '900', fontSize: 18 },
   cardTitle: { color: '#fff', fontWeight: '900', fontSize: 15 },
-  cardMeta: { color: 'rgba(220,229,255,0.65)', fontSize: 12, marginTop: 3, fontWeight: '700' },
+  cardMeta: { color: Theme.textDim, fontSize: 12, marginTop: 3, fontWeight: '700' },
   statusText: { color: Theme.primary, fontSize: 12, marginTop: 4, fontWeight: '800', textTransform: 'capitalize' },
   challengeBtn: { paddingHorizontal: 16, height: 40, borderRadius: 20, backgroundColor: Theme.primary, alignItems: 'center', justifyContent: 'center' },
   challengeText: { color: '#fff', fontWeight: '900' },
   disabledBtn: { opacity: 0.55 },
-  primaryBtn: { height: 44, borderRadius: 22, backgroundColor: Theme.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, flexDirection: 'row', gap: 6 },
+  primaryBtn: { height: 44, borderRadius: 22, backgroundColor: Theme.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, flexDirection: 'row', gap: 6, shadowColor: Theme.primary, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 5 },
   primaryBtnText: { color: '#fff', fontWeight: '900' },
   actionsRow: { flexDirection: 'row', gap: 10 },
   acceptBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: Theme.success, alignItems: 'center', justifyContent: 'center' },
   rejectBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: Theme.danger, alignItems: 'center', justifyContent: 'center' },
-  nextBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: '#7C5CFF', alignItems: 'center', justifyContent: 'center' },
+  nextBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,120,0,0.70)', alignItems: 'center', justifyContent: 'center' },
   btnText: { color: '#fff', fontWeight: '900' },
 });
