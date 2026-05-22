@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node \"c:\\\\laragon\\\\www\\\\my app\\\\puzzlegame\\\\scripts\\\\game-test-agent.mjs\")",
+      "Bash(node scripts/game-test-agent.mjs)",
+      "Bash(grep -v \"//\")",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

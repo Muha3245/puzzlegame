@@ -104,21 +104,27 @@ export default function Settings() {
         >
           {/* Audio Settings */}
           <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            AUDIO SETTINGS
+            🔊 AUDIO
           </HighlightText>
 
           <View style={{ gap: 6 }}>
             <Row
+              icon="musical-note-outline"
+              iconColor={Theme.primary}
               label="Sound Effects"
               sub="Tap and word-found chimes"
               right={<Toggle on={s.sound} onChange={(v) => updateSettings({ sound: v })} />}
             />
             <Row
+              icon="headset-outline"
+              iconColor="#B36AE2"
               label="Background Music"
               sub="Music across full app"
               right={<Toggle on={s.music} onChange={(v) => updateSettings({ music: v })} />}
             />
             <Row
+              icon="phone-portrait-outline"
+              iconColor={Theme.success}
               label="Haptics"
               sub="Vibrate on word found"
               right={<Toggle on={s.haptics} onChange={(v) => updateSettings({ haptics: v })} />}
@@ -127,7 +133,7 @@ export default function Settings() {
 
           {/* Volume slider */}
           <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            MUSIC VOLUME
+            🎚 MUSIC VOLUME
           </HighlightText>
 
           <View style={styles.volumeCard}>
@@ -141,7 +147,7 @@ export default function Settings() {
 
           {/* Music Theme Selection */}
           <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            BACKGROUND MUSIC THEME
+            🎵 MUSIC THEME
           </HighlightText>
 
           <View style={styles.musicGrid}>
@@ -173,10 +179,12 @@ export default function Settings() {
 
           {/* Notifications */}
           <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            NOTIFICATIONS
+            🔔 NOTIFICATIONS
           </HighlightText>
 
           <Row
+            icon="alarm-outline"
+            iconColor={Theme.warn}
             label="Daily Reminder"
             sub="9:00 AM each morning"
             right={<Toggle on={s.notify} onChange={(v) => updateSettings({ notify: v })} />}
@@ -184,28 +192,36 @@ export default function Settings() {
 
           {/* App Information */}
           <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            APP INFORMATION
+            ℹ️ APP INFORMATION
           </HighlightText>
 
           <View style={{ gap: 6 }}>
             <Row
+              icon="help-circle-outline"
+              iconColor={Theme.primary}
               label="How to Play"
               sub="Quick walkthrough & tips"
               right={<Chev />}
               onPress={() => router.push('/help')}
             />
             <Row
+              icon="language-outline"
+              iconColor={Theme.textDim}
               label="Language"
               sub="English"
               right={<Chev />}
               onPress={() => Alert.alert('Language', 'Only English is supported at the moment.')}
             />
             <Row
+              icon="refresh-circle-outline"
+              iconColor={Theme.success}
               label="Restore Purchases"
               right={<Chev />}
               onPress={() => Alert.alert('Restore Purchases', 'No purchases found on this account.')}
             />
             <Row
+              icon="shield-checkmark-outline"
+              iconColor="#5B9BFF"
               label="Privacy & Terms"
               right={<Chev />}
               onPress={() => Alert.alert('Privacy & Terms', 'By using WordPuzzle you agree to our privacy policy and terms of service.')}
@@ -221,11 +237,15 @@ export default function Settings() {
 }
 
 function Row({
+  icon,
+  iconColor,
   label,
   sub,
   right,
   onPress,
 }: {
+  icon: keyof typeof Ionicons['glyphMap'];
+  iconColor?: string;
   label: string;
   sub?: string;
   right: React.ReactNode;
@@ -233,8 +253,8 @@ function Row({
 }) {
   return (
     <Pressable onPress={onPress} style={styles.row}>
-      <View style={styles.rowIcon}>
-        <View style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: Theme.primary }} />
+      <View style={[styles.rowIcon, { backgroundColor: `${iconColor ?? Theme.primary}22` }]}>
+        <Ionicons name={icon} size={18} color={iconColor ?? Theme.primary} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{label}</Text>

@@ -9,7 +9,7 @@ import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { HighlightText } from '../components/HighlightText';
 import { Theme, GlassEffects } from '../constants/theme';
 import { useAppState } from '../lib/storage';
-import { createBattleRoom, PublicUser } from '../lib/online';
+import { acceptBattleRoom, BattleRoom, createBattleRoom, getBattleRooms, PublicUser } from '../lib/online';
 
 export default function Winner() {
   const params = useLocalSearchParams<{
@@ -20,6 +20,8 @@ export default function Winner() {
   }>();
   const { addCoins } = useAppState();
   const [rematchBusy, setRematchBusy] = useState(false);
+  const [incomingRematch, setIncomingRematch] = useState<BattleRoom | null>(null);
+  const [acceptRematchBusy, setAcceptRematchBusy] = useState(false);
 
   const winner    = params.winner ?? 'Player 1';
   const p1        = params.p1 ?? 'Player 1';
@@ -108,6 +110,40 @@ export default function Winner() {
 
   const iconColor = isBattle && !iWon && !isTie ? Theme.danger : Theme.warn;
 
+  // Poll for incoming rematch requests from the opponent every 2.5 s.
+  // Realtime INSERT events are unreliable immediately after screen navigation
+  // (websocket reconnects), so REST polling is the safe fallback.
+  useEffect(() => {
+    if (!isBattle || !params.opponentId) return;
+    const check = async () => {
+      try {
+        const rooms = await getBattleRooms();
+        const hit = rooms.incoming.find((r) => r.player1Id === params.opponentId);
+        if (hit) setIncomingRematch(hit);
+      } catch {}
+    };
+    check();
+    const iv = setInterval(check, 2500);
+    return () => clearInterval(iv);
+  }, [isBattle, params.opponentId]);
+
+  const acceptIncomingRematch = async () => {
+    if (!incomingRematch) return;
+    setAcceptRematchBusy(true);
+    try {
+      await acceptBattleRoom(incomingRematch);
+      const room = incomingRematch;
+      setIncomingRematch(null);
+      router.replace(
+        `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`,
+      );
+    } catch (e: any) {
+      Alert.alert('Rematch error', e?.message || 'Could not accept rematch.');
+    } finally {
+      setAcceptRematchBusy(false);
+    }
+  };
+
   const sendSameLevelRematch = async () => {
     if (!params.opponentId) {
       Alert.alert('Rematch error', 'Opponent information is missing. Please start the rematch from Battle Arena.');
@@ -134,8 +170,10 @@ export default function Winner() {
         level: Number(params.level ?? 1),
       });
 
+      // Immediately enter the game waiting lobby — the opponent receives the
+      // global BattleNotificationModal (in _layout.tsx) with Accept/Fight button.
       router.replace(
-        `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`
+        `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`,
       );
     } catch (error: any) {
       Alert.alert('Rematch error', error?.message || 'Unable to send rematch.');
@@ -220,6 +258,22 @@ export default function Winner() {
               {coinDelta > 0 ? `+${coinDelta}` : coinDelta} coins {coinDelta > 0 ? 'awarded' : 'lost'}
             </Text>
           </View>
+        )}
+
+        {/* Incoming rematch banner — shown when opponent sends a rematch */}
+        {isBattle && incomingRematch && (
+          <Pressable
+            onPress={acceptIncomingRematch}
+            disabled={acceptRematchBusy}
+            style={[styles.rematchBanner, acceptRematchBusy && { opacity: 0.7 }]}
+          >
+            <Ionicons name="flash" size={22} color="#0D0500" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rematchBannerTitle}>⚡ Rematch Request!</Text>
+              <Text style={styles.rematchBannerSub}>{incomingRematch.player1Name} wants a rematch</Text>
+            </View>
+            <Text style={styles.rematchBannerCta}>{acceptRematchBusy ? 'Joining…' : 'Accept'}</Text>
+          </Pressable>
         )}
 
         {/* Battle: Rematch or Return */}
@@ -392,4 +446,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999,
   },
   ghostBtnText: { color: Theme.primary, fontSize: 14, fontWeight: '800' },
+
+  rematchBanner: {
+    width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: Theme.warn, borderRadius: 20, padding: 16, marginBottom: 10,
+    shadowColor: Theme.warn, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 6,
+  },
+  rematchBannerTitle: { color: '#0D0500', fontWeight: '900', fontSize: 15 },
+  rematchBannerSub: { color: 'rgba(13,5,0,0.7)', fontSize: 12, fontWeight: '700' },
+  rematchBannerCta: { color: '#0D0500', fontWeight: '900', fontSize: 14 },
 });

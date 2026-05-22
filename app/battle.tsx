@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   ImageBackground,
   Pressable,
   ScrollView,
@@ -29,7 +30,6 @@ import {
   rejectBattleRoom,
   subscribeToMyBattleList,
 } from '../lib/online';
-import { notifyBattleRequest } from '../lib/notifications';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { SkeletonCard, SkeletonSection } from '../components/SkeletonLoader';
 
@@ -70,9 +70,33 @@ export default function BattleArena() {
   const [rooms, setRooms] = useState<RoomBucket>(emptyBuckets);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [rematchSentIds, setRematchSentIds] = useState<Set<string>>(new Set());
   const prevIncomingRef = useRef<string[]>([]);
+  const [toastMsg, setToastMsg] = useState('');
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const totalBadge = rooms.incoming.length + rooms.active.length;
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToastMsg(msg);
+    toastAnim.setValue(0);
+    Animated.spring(toastAnim, { toValue: 1, friction: 6, tension: 80, useNativeDriver: true }).start();
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 0, duration: 400, useNativeDriver: true }).start(() => setToastMsg(''));
+    }, 2600);
+  }, [toastAnim]);
+
+  const friendBattleCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    [...rooms.incoming, ...rooms.active, ...rooms.outgoing].forEach((r) => {
+      const oppId = uid === r.player1Id ? r.player2Id : r.player1Id;
+      map[oppId] = (map[oppId] || 0) + 1;
+    });
+    return map;
+  }, [rooms.incoming, rooms.active, rooms.outgoing, uid]);
 
   const titleLine = useMemo(() => {
     if (!hasSelectedLevel) return 'Choose a friend and start a live room';
@@ -96,26 +120,29 @@ export default function BattleArena() {
 
   useFocusEffect(
     useCallback(() => {
-      let cleanup: undefined | (() => void);
+      // `active` prevents a stale .then() from subscribing after the screen blurs.
+      // Without this, the channel is created but never cleaned up, causing the
+      // "cannot add callbacks after subscribe()" Supabase error on next focus.
+      let active = true;
+      let unsub: (() => void) | undefined;
+
       load();
       getCurrentUserId().then((current) => {
-        if (current) cleanup = subscribeToMyBattleList(current, load);
-      });
-      return () => cleanup?.();
+        if (!active || !current) return;
+        unsub = subscribeToMyBattleList(current, load);
+      }).catch(() => {});
+
+      return () => {
+        active = false;
+        unsub?.();
+      };
     }, [load]),
   );
 
-  // Notify user when a new battle request arrives
+  // Track incoming IDs so the global _layout.tsx notification can deduplicate
   useEffect(() => {
-    const currentIds = rooms.incoming.map((r) => r.id);
-    const prev = prevIncomingRef.current;
-    const newRooms = rooms.incoming.filter((r) => !prev.includes(r.id));
-    newRooms.forEach((r) => {
-      const senderName = uid === r.player1Id ? r.player2Name : r.player1Name;
-      notifyBattleRequest(senderName).catch(() => {});
-    });
-    prevIncomingRef.current = currentIds;
-  }, [rooms.incoming, uid]);
+    prevIncomingRef.current = rooms.incoming.map((r) => r.id);
+  }, [rooms.incoming]);
 
   const challenge = async (friend: PublicUser) => {
     if (!hasSelectedLevel) {
@@ -133,11 +160,11 @@ export default function BattleArena() {
         difficulty,
         level,
       });
-      await load();
-      Alert.alert('Challenge sent', `${friend.displayName} can accept this battle now.`, [
-        { text: 'OK' },
-        { text: 'Open Room', onPress: () => openRoom(room) },
-      ]);
+      // Navigate immediately — player 1 waits in the game lobby for opponent to accept.
+      // Do NOT await load() here: subscribeToMyBattleList fires anyway, and the delay
+      // caused the screen to never navigate (bug fix).
+      showToast(`⚡ Entering battle lobby…`);
+      openRoom(room);
     } catch (error: any) {
       Alert.alert('Challenge error', error?.message || 'Unable to send battle challenge.');
     } finally {
@@ -149,7 +176,10 @@ export default function BattleArena() {
     try {
       setBusyId(room.id);
       await acceptBattleRoom(room);
-      await load();
+      // Navigate immediately — do NOT await load() before openRoom().
+      // load() triggers subscribeToMyBattleList which fires its own load(), creating a
+      // double-reload race that prevented the router.push from executing (bug fix).
+      showToast('🔥 Battle accepted! Get ready!');
       openRoom(room);
     } catch (error: any) {
       Alert.alert('Accept error', error?.message || 'Unable to accept battle.');
@@ -162,6 +192,7 @@ export default function BattleArena() {
     try {
       setBusyId(room.id);
       await rejectBattleRoom(room);
+      showToast('❌ Battle declined');
       await load();
     } catch (error: any) {
       Alert.alert('Reject error', error?.message || 'Unable to reject battle.');
@@ -195,11 +226,9 @@ export default function BattleArena() {
         difficulty: room.difficulty,
         level: room.level,
       });
-      await load();
-      Alert.alert('Rematch sent', 'Your friend can accept the rematch now.', [
-        { text: 'OK' },
-        { text: 'Open', onPress: () => openRoom(nextRoom) },
-      ]);
+      setRematchSentIds((prev) => new Set([...prev, room.id]));
+      showToast('🔄 Rematch sent! Entering battle…');
+      openRoom(nextRoom);
     } catch (error: any) {
       Alert.alert('Rematch error', error?.message || 'Unable to create rematch.');
     } finally {
@@ -226,11 +255,8 @@ export default function BattleArena() {
         difficulty: room.difficulty,
         level: Math.min(room.level + 1, 8),
       });
-      await load();
-      Alert.alert('Next level challenge sent', 'Your friend can accept the next level battle now.', [
-        { text: 'OK' },
-        { text: 'Open', onPress: () => openRoom(nextRoom) },
-      ]);
+      showToast(`⬆️ Next level challenge sent!`);
+      openRoom(nextRoom);
     } catch (error: any) {
       Alert.alert('Next level error', error?.message || 'Unable to create next level battle.');
     } finally {
@@ -245,7 +271,7 @@ export default function BattleArena() {
       <View style={styles.orb2} />
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/levels')} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color="#fff" />
           </Pressable>
           <View style={{ flex: 1 }}>
@@ -260,6 +286,21 @@ export default function BattleArena() {
           </View>
         </View>
 
+        {/* Animated toast banner */}
+        {toastMsg ? (
+          <Animated.View
+            style={[
+              styles.toast,
+              {
+                opacity: toastAnim,
+                transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-14, 0] }) }],
+              },
+            ]}
+          >
+            <Text style={styles.toastText}>{toastMsg}</Text>
+          </Animated.View>
+        ) : null}
+
         {loading ? (
           <View style={{ paddingHorizontal: 18, paddingTop: 8 }}>
             <SkeletonSection />
@@ -269,25 +310,29 @@ export default function BattleArena() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            {!hasSelectedLevel && (
-              <AnimatedEntry from="bottom" delay={0}>
-              <View style={styles.infoCard}>
-                <View style={styles.infoIconRow}>
-                  <Ionicons name="flash" size={22} color={Theme.warn} />
-                  <Text style={styles.infoTitle}>How to Battle</Text>
-                </View>
-                <Text style={styles.infoText}>
-                  Go to Levels → pick a category → tap <Text style={{ color: Theme.warn, fontWeight: '900' }}>Battle</Text> on any level card. Both players solve the exact same puzzle simultaneously. Whoever finds the most words wins coins!
-                </Text>
-                <Pressable onPress={() => router.push('/levels')} style={styles.primaryBtn}>
-                  <Ionicons name="grid-outline" size={16} color="#fff" />
-                  <Text style={styles.primaryBtnText}>Choose Level</Text>
-                </Pressable>
-              </View>
-              </AnimatedEntry>
-            )}
 
-            {/* Battle twists explainer */}
+            {/* ── 1. Choose Level card — always at top ── */}
+            <AnimatedEntry from="bottom" delay={0}>
+            <View style={styles.infoCard}>
+              <View style={styles.infoIconRow}>
+                <Ionicons name="flash" size={22} color={Theme.warn} />
+                <Text style={styles.infoTitle}>
+                  {hasSelectedLevel ? `⚡ ${categoryTitle} • ${difficulty.toUpperCase()} • Lv ${level}` : 'How to Battle'}
+                </Text>
+              </View>
+              {!hasSelectedLevel && (
+                <Text style={styles.infoText}>
+                  Go to Levels → pick a category → tap <Text style={{ color: Theme.warn, fontWeight: '900' }}>Battle</Text> on any level card. Both players solve the exact same puzzle. Whoever finds the most words wins coins!
+                </Text>
+              )}
+              <Pressable onPress={() => router.push('/levels')} style={styles.primaryBtn}>
+                <Ionicons name="grid-outline" size={16} color="#fff" />
+                <Text style={styles.primaryBtnText}>{hasSelectedLevel ? 'Change Level' : 'Choose Level'}</Text>
+              </Pressable>
+            </View>
+            </AnimatedEntry>
+
+            {/* ── 2. Battle Twists ── */}
             <AnimatedEntry from="bottom" delay={60}>
             <View style={styles.twistsCard}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
@@ -319,45 +364,9 @@ export default function BattleArena() {
             </View>
             </AnimatedEntry>
 
+            {/* ── 3. Challenge Friends ── */}
             <AnimatedEntry from="bottom" delay={120}>
-            <Section title="Incoming Battle Requests" count={rooms.incoming.length} />
-            {rooms.incoming.length === 0 ? <Empty text="No incoming battles" /> : rooms.incoming.map((room, i) => (
-              <AnimatedEntry key={room.id} delay={i * 55}>
-              <RoomCard
-                room={room}
-                uid={uid}
-                busy={busyId === room.id}
-                footer={
-                  <View style={styles.actionsRow}>
-                    <Pressable onPress={() => accept(room)} style={styles.acceptBtn}><Text style={styles.btnText}>Accept</Text></Pressable>
-                    <Pressable onPress={() => reject(room)} style={styles.rejectBtn}><Text style={styles.btnText}>Reject</Text></Pressable>
-                  </View>
-                }
-              />
-              </AnimatedEntry>
-            ))}
-            </AnimatedEntry>
-
-            <AnimatedEntry from="bottom" delay={180}>
-            <Section title="Active Live Battles" count={rooms.active.length} />
-            {rooms.active.length === 0 ? <Empty text="No active battle room" /> : rooms.active.map((room, i) => (
-              <AnimatedEntry key={room.id} delay={i * 55}>
-              <RoomCard
-                room={room}
-                uid={uid}
-                busy={busyId === room.id}
-                footer={
-                  <Pressable onPress={() => openRoom(room)} style={styles.primaryBtn}>
-                    <Text style={styles.primaryBtnText}>Play / Continue</Text>
-                  </Pressable>
-                }
-              />
-              </AnimatedEntry>
-            ))}
-            </AnimatedEntry>
-
-            <AnimatedEntry from="bottom" delay={240}>
-            <Section title="Challenge Friends" count={friends.length} />
+            <Section title="👥 Challenge Friends" count={friends.length} />
             {friends.length === 0 ? <Empty text="Add friends first, then start battles here." /> : friends.map((friend, i) => (
               <AnimatedEntry key={friend.uid} delay={i * 50}>
               <View style={styles.friendCard}>
@@ -367,26 +376,97 @@ export default function BattleArena() {
                   <Text style={styles.cardMeta}>{hasSelectedLevel ? titleLine : 'Select a level first'}</Text>
                 </View>
                 <Pressable disabled={busyId === friend.uid} onPress={() => challenge(friend)} style={[styles.challengeBtn, !hasSelectedLevel && styles.disabledBtn]}>
-                  {busyId === friend.uid ? <ActivityIndicator color="#fff" /> : <Text style={styles.challengeText}>Battle</Text>}
+                  {busyId === friend.uid ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Text style={styles.challengeText}>⚡ Battle</Text>
+                      {(friendBattleCounts[friend.uid] ?? 0) > 0 && (
+                        <View style={styles.friendCountBadge}>
+                          <Text style={styles.friendCountText}>{friendBattleCounts[friend.uid]}</Text>
+                        </View>
+                      )}
+                    </>
+                  )}
                 </Pressable>
               </View>
               </AnimatedEntry>
             ))}
             </AnimatedEntry>
 
-            <AnimatedEntry from="bottom" delay={300}>
-            <Section title="Completed Battles" count={rooms.completed.length} />
-            {rooms.completed.length === 0 ? <Empty text="Completed battles will appear here." /> : rooms.completed.slice(0, 15).map((room, i) => (
-              <AnimatedEntry key={room.id} delay={i * 50}>
-              <CompletedRoomCard
+            {/* ── 4. Incoming Requests ── */}
+            <AnimatedEntry from="bottom" delay={180}>
+            <Section title="📥 Incoming Requests" count={rooms.incoming.length} />
+            {rooms.incoming.length === 0 ? <Empty text="No incoming battles" /> : rooms.incoming.map((room, i) => (
+              <AnimatedEntry key={room.id} delay={i * 55}>
+              <RoomCard
                 room={room}
                 uid={uid}
-                onRematch={() => rematch(room)}
-                onNext={() => nextLevelBattle(room)}
                 busy={busyId === room.id}
+                footer={
+                  <View style={styles.actionsRow}>
+                    <Pressable onPress={() => accept(room)} style={styles.acceptBtn}><Text style={styles.btnText}>✅ Accept</Text></Pressable>
+                    <Pressable onPress={() => reject(room)} style={styles.rejectBtn}><Text style={styles.btnText}>✕ Decline</Text></Pressable>
+                  </View>
+                }
               />
               </AnimatedEntry>
             ))}
+            </AnimatedEntry>
+
+            {/* ── 5. Active Live Battles — at the bottom above completed ── */}
+            <AnimatedEntry from="bottom" delay={210}>
+            <Section title="⚡ Active Battles" count={rooms.active.length} />
+            {rooms.active.length === 0 ? <Empty text="No active battles right now" /> : rooms.active.map((room, i) => (
+              <AnimatedEntry key={room.id} delay={i * 55}>
+              <RoomCard
+                room={room}
+                uid={uid}
+                busy={busyId === room.id}
+                footer={
+                  <Pressable onPress={() => openRoom(room)} style={styles.primaryBtn}>
+                    <Text style={styles.primaryBtnText}>▶ Continue Battle</Text>
+                  </Pressable>
+                }
+              />
+              </AnimatedEntry>
+            ))}
+            </AnimatedEntry>
+
+            <AnimatedEntry from="bottom" delay={270}>
+            {/* ── 6. Completed battles — collapsed by default, always at the bottom ── */}
+            <Pressable
+              onPress={() => setShowCompleted((v) => !v)}
+              style={styles.sectionHeader}
+            >
+              <Text style={styles.sectionTitle}>🏁 Completed Battles</Text>
+              <View style={styles.sectionBadge}>
+                <Text style={styles.sectionBadgeText}>{rooms.completed.length}</Text>
+              </View>
+              <Ionicons
+                name={showCompleted ? 'chevron-up-outline' : 'chevron-down-outline'}
+                size={16}
+                color={Theme.textDim}
+                style={{ marginLeft: 'auto' }}
+              />
+            </Pressable>
+
+            {showCompleted && (
+              rooms.completed.length === 0
+                ? <Empty text="Completed battles will appear here." />
+                : rooms.completed.slice(0, 15).map((room, i) => (
+                  <AnimatedEntry key={room.id} delay={i * 40}>
+                  <CompletedRoomCard
+                    room={room}
+                    uid={uid}
+                    rematchSent={rematchSentIds.has(room.id)}
+                    onRematch={() => rematch(room)}
+                    onNext={() => nextLevelBattle(room)}
+                    busy={busyId === room.id}
+                  />
+                  </AnimatedEntry>
+                ))
+            )}
             </AnimatedEntry>
 
             <View style={{ height: 40 }} />
@@ -428,23 +508,52 @@ function RoomCard({ room, uid, footer, busy }: { room: BattleRoom; uid: string |
   );
 }
 
-function CompletedRoomCard({ room, uid, onRematch, onNext, busy }: { room: BattleRoom; uid: string | null; onRematch: () => void; onNext: () => void; busy?: boolean }) {
+function CompletedRoomCard({
+  room, uid, onRematch, onNext, busy, rematchSent,
+}: {
+  room: BattleRoom; uid: string | null; onRematch: () => void;
+  onNext: () => void; busy?: boolean; rematchSent?: boolean;
+}) {
   const opponentName = uid === room.player1Id ? room.player2Name : room.player1Name;
-  const result = room.winnerId ? (room.winnerId === uid ? 'You won' : `${opponentName} won`) : 'Draw';
+  const iWon = room.winnerId && room.winnerId === uid;
+  const isDraw = !room.winnerId;
+  const result = isDraw ? 'Draw' : iWon ? '🏆 You won!' : `${opponentName} won`;
+  const resultColor = isDraw ? Theme.warn : iWon ? Theme.success : Theme.danger;
+
   return (
     <View style={styles.roomCard}>
       <View style={styles.roomTop}>
-        <View style={[styles.avatar, styles.goldAvatar]}><Ionicons name="trophy" size={20} color="#fff" /></View>
+        <View style={[styles.avatar, iWon ? styles.goldAvatar : isDraw ? styles.drawAvatar : styles.lossAvatar]}>
+          <Ionicons
+            name={iWon ? 'trophy' : isDraw ? 'ribbon-outline' : 'skull-outline'}
+            size={20}
+            color="#fff"
+          />
+        </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>{result}</Text>
-          <Text style={styles.cardMeta}>{room.categoryTitle} • {room.difficulty.toUpperCase()} • Level {room.level}</Text>
+          <Text style={[styles.cardTitle, { color: resultColor }]}>{result}</Text>
+          <Text style={styles.cardMeta}>
+            {room.categoryTitle} • {room.difficulty.toUpperCase()} • Level {room.level}
+          </Text>
         </View>
         {busy && <ActivityIndicator color={Theme.primary} />}
       </View>
-      <View style={styles.actionsRow}>
-        <Pressable onPress={onRematch} style={styles.acceptBtn}><Text style={styles.btnText}>Rematch</Text></Pressable>
-        <Pressable onPress={onNext} style={styles.nextBtn}><Text style={styles.btnText}>Next Level</Text></Pressable>
-      </View>
+
+      {rematchSent ? (
+        <View style={styles.rematchSentPill}>
+          <Ionicons name="checkmark-circle" size={14} color={Theme.success} />
+          <Text style={styles.rematchSentText}>Rematch sent — waiting for opponent</Text>
+        </View>
+      ) : (
+        <View style={styles.actionsRow}>
+          <Pressable onPress={onRematch} disabled={busy} style={[styles.acceptBtn, busy && { opacity: 0.6 }]}>
+            <Text style={styles.btnText}>Rematch</Text>
+          </Pressable>
+          <Pressable onPress={onNext} disabled={busy} style={[styles.nextBtn, busy && { opacity: 0.6 }]}>
+            <Text style={styles.btnText}>Next Level</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -489,12 +598,25 @@ const styles = StyleSheet.create({
   roomTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,120,0,0.22)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.35)' },
   goldAvatar: { backgroundColor: 'rgba(255,190,55,0.35)' },
+  drawAvatar: { backgroundColor: 'rgba(255,210,63,0.22)' },
+  lossAvatar: { backgroundColor: 'rgba(247,108,108,0.25)' },
   avatarText: { color: '#fff', fontWeight: '900', fontSize: 18 },
   cardTitle: { color: '#fff', fontWeight: '900', fontSize: 15 },
   cardMeta: { color: Theme.textDim, fontSize: 12, marginTop: 3, fontWeight: '700' },
   statusText: { color: Theme.primary, fontSize: 12, marginTop: 4, fontWeight: '800', textTransform: 'capitalize' },
-  challengeBtn: { paddingHorizontal: 16, height: 40, borderRadius: 20, backgroundColor: Theme.primary, alignItems: 'center', justifyContent: 'center' },
+  challengeBtn: { paddingHorizontal: 14, height: 40, borderRadius: 20, backgroundColor: Theme.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 },
   challengeText: { color: '#fff', fontWeight: '900' },
+  friendCountBadge: { minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  friendCountText: { color: Theme.primary, fontWeight: '900', fontSize: 11 },
+  toast: {
+    marginHorizontal: 18, marginBottom: 8,
+    backgroundColor: 'rgba(255,100,0,0.93)',
+    borderRadius: 18, paddingHorizontal: 18, paddingVertical: 11,
+    alignItems: 'center',
+    shadowColor: Theme.primary, shadowOpacity: 0.55, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 8,
+    borderWidth: 1, borderColor: 'rgba(255,200,100,0.3)',
+  },
+  toastText: { color: '#fff', fontWeight: '900', fontSize: 14, textAlign: 'center' },
   disabledBtn: { opacity: 0.55 },
   primaryBtn: { height: 44, borderRadius: 22, backgroundColor: Theme.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, flexDirection: 'row', gap: 6, shadowColor: Theme.primary, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 5 },
   primaryBtnText: { color: '#fff', fontWeight: '900' },
@@ -503,4 +625,6 @@ const styles = StyleSheet.create({
   rejectBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: Theme.danger, alignItems: 'center', justifyContent: 'center' },
   nextBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,120,0,0.70)', alignItems: 'center', justifyContent: 'center' },
   btnText: { color: '#fff', fontWeight: '900' },
+  rematchSentPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(74,204,138,0.12)', borderWidth: 1, borderColor: 'rgba(74,204,138,0.3)' },
+  rematchSentText: { color: Theme.success, fontSize: 13, fontWeight: '800' },
 });

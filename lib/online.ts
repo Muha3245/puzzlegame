@@ -31,7 +31,7 @@ export type BattleRoom = {
   player2Id: string;
   player1Name: string;
   player2Name: string;
-  status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'rejected';
+  status: 'pending' | 'accepted' | 'in_progress' | 'completed';
   categoryId: string;
   categoryKey: string;
   categoryTitle: string;
@@ -494,10 +494,11 @@ export async function acceptBattleRoom(room: BattleRoom) {
 }
 
 export async function rejectBattleRoom(room: BattleRoom) {
-  const { error } = await supabase
-    .from('battle_rooms')
-    .update({ status: 'rejected', updated_at: new Date().toISOString() })
-    .eq('id', room.id);
+  // Delete instead of setting status='rejected' — the DB check constraint only allows
+  // pending/accepted/in_progress/completed. Deletion also cleans up cleanly and fires
+  // subscribeToMyBattleList so both players' lists refresh automatically.
+  await supabase.from('battle_room_players').delete().eq('room_id', room.id);
+  const { error } = await supabase.from('battle_rooms').delete().eq('id', room.id);
   if (error) throw error;
 }
 
@@ -645,9 +646,32 @@ export function subscribeToBattleRoom(roomId: string, onChange: () => void) {
 }
 
 export function subscribeToMyBattleList(userId: string, onChange: () => void) {
+  // Append a timestamp so each call gets a fresh channel name — prevents the
+  // "cannot add callbacks after subscribe()" error when useFocusEffect fires
+  // multiple times with the same userId.
   const channel = supabase
-    .channel(`battle-list-${userId}`)
+    .channel(`battle-list-${userId}-${Date.now()}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'battle_rooms' }, onChange)
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}
+
+// Fires when a new battle room targets this user as player2.
+// We deliberately skip the server-side filter (player2_id=eq.${userId}) because
+// Supabase postgres_changes column filters are unreliable with certain RLS
+// configurations — the event fires but is silently dropped before delivery.
+// Instead we subscribe to ALL inserts (RLS still limits which rows are visible)
+// and check player2_id client-side, which is 100% reliable.
+export function subscribeToIncomingBattles(userId: string, onNewRoom: (room: BattleRoom) => void) {
+  const channel = supabase
+    .channel(`battle-incoming-${userId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'battle_rooms' },
+      (payload: any) => {
+        if (payload.new?.player2_id === userId) onNewRoom(mapBattleRoom(payload.new));
+      },
+    )
     .subscribe();
   return () => { supabase.removeChannel(channel); };
 }

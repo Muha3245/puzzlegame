@@ -825,9 +825,11 @@ function FloatingCategoryCard({
           <CategorySvgIcon name={item.name} size={86} />
         </View>
 
-        <Text numberOfLines={2} style={styles.categoryTitle}>
-          {item.name}
-        </Text>
+        <View style={styles.categoryTitleWrap}>
+          <Text numberOfLines={2} style={styles.categoryTitle}>
+            {item.name}
+          </Text>
+        </View>
 
         {premiumPrice ? <PremiumStarBadge price={premiumPrice} /> : null}
       </Pressable>
@@ -888,11 +890,7 @@ export default function Levels() {
 
   const selectedCategory = useMemo(() => {
     if (!params.category) return undefined;
-
-    const direct = currentCategorySet.find((item) => item.id === params.category);
-    if (direct) return direct;
-
-    return currentCategorySet[0];
+    return currentCategorySet.find((item) => item.id === params.category);
   }, [currentCategorySet, params.category]);
 
   const columns = width >= 500 ? 3 : 2;
@@ -922,19 +920,15 @@ export default function Levels() {
   };
 
   const onDifficultyChange = (item: DifficultyId) => {
-    setDifficulty(item);
-
     if (selectedCategory) {
       const nextSet = getCategorySet(item);
       const nextCategory = nextSet[selectedCategory.baseIndex % nextSet.length] ?? nextSet[0];
-
-      router.setParams({
-        category: nextCategory.id,
-        difficulty: item,
-      });
+      // Set params first so selectedCategory re-derives from the new category id atomically
+      router.setParams({ category: nextCategory.id, difficulty: item });
     } else {
       router.setParams({ difficulty: item });
     }
+    setDifficulty(item);
   };
 
   const openCategory = (categoryId: string) => {
@@ -1393,13 +1387,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  categoryTitleWrap: {
+    backgroundColor: 'rgba(255,122,0,0.82)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 2,
+  },
   categoryTitle: {
-    color: '#33333f',
-    fontSize: 15,
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '900',
     textAlign: 'center',
     lineHeight: 18,
-    minHeight: 38,
+    minHeight: 34,
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   premiumBadge: {
     position: 'absolute',

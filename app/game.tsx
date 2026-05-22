@@ -179,9 +179,10 @@ export default function Game() {
   const [oppFlash, setOppFlash] = useState<string | null>(null); // last word opponent found
 
   // Stable refs so onFound closure never has stale uid / send fn
-  const myUidRef        = useRef<string | null>(null);
-  const sendBattleScore = useRef<((d: BattleBroadcastPayload) => void) | null>(null);
-  const goWinnerRef     = useRef<() => void>(() => {});
+  const myUidRef          = useRef<string | null>(null);
+  const sendBattleScore   = useRef<((d: BattleBroadcastPayload) => void) | null>(null);
+  const goWinnerRef       = useRef<() => void>(() => {});
+  const endBattleCalledRef = useRef(false); // prevents duplicate endBattleNow calls
 
   // Animations
   const bannerPulse   = useRef(new Animated.Value(0)).current;
@@ -270,6 +271,8 @@ export default function Game() {
 
   const endBattleNow = useCallback(async ({ winnerId, reason }: { winnerId: string | null; reason: 'completed' | 'timeout' | 'quit' }) => {
     if (!isLiveBattle || !roomId || battleFinishedReason) return;
+    if (endBattleCalledRef.current) return; // prevent duplicate calls (e.g. simultaneous timeout)
+    endBattleCalledRef.current = true;
 
     setBattleWinnerId(winnerId);
     setBattleFinishedReason(reason);
@@ -281,7 +284,10 @@ export default function Game() {
     setCanContinue(true);
     setWon(true);
 
-    await finishBattleRoomNow(roomId, winnerId).catch(() => {});
+    // Retry once on failure so stale `in_progress` rooms don't linger in the battle list.
+    await finishBattleRoomNow(roomId, winnerId)
+      .catch(() => finishBattleRoomNow(roomId, winnerId))
+      .catch(() => {});
 
     if (myUidRef.current && sendBattleScore.current) {
       sendBattleScore.current({
@@ -368,6 +374,7 @@ export default function Game() {
     setTimeLeft(diffCfg.timerSec); setFrozen(false); setTimedOut(false);
     setCurrentPlayer(1); setScores({ 1: 0, 2: 0 }); setTurnsLeft(levelWords.length);
     setTurnFound([]);
+    endBattleCalledRef.current = false; // reset guard for new game
     if (isLiveBattle) {
       // Don't start timer yet — wait until both players are in the room
       setWaitingForOpponent(true);
@@ -429,9 +436,20 @@ export default function Game() {
 
   useEffect(() => {
     if (!isLiveBattle || !roomId || !timedOut || battleFinishedReason) return;
-    const opponentId = battleRoom
-      ? (myUidRef.current === battleRoom.player1Id ? battleRoom.player2Id : battleRoom.player1Id)
-      : opponentBattleState?.userId ?? null;
+
+    // Both players run the same algorithm → they agree on the winner even during simultaneous timeout.
+    // Old logic ("opponent always wins") caused conflicting broadcasts → both screens showed "Defeated".
+    const myWords   = found.length;
+    const oppWords  = Math.max(opponentBattleState?.wordsFound ?? 0, opponentFoundEntries.length);
+    const opponentId = opponentBattleState?.userId
+      ?? (battleRoom
+        ? (myUidRef.current === battleRoom.player1Id ? battleRoom.player2Id : battleRoom.player1Id)
+        : null);
+
+    let timeoutWinnerId: string | null = null;
+    if (myWords > oppWords)       timeoutWinnerId = myUidRef.current;
+    else if (oppWords > myWords)  timeoutWinnerId = opponentId;
+    // equal words → draw (null)
 
     updateBattleProgress({
       roomId,
@@ -442,8 +460,8 @@ export default function Game() {
       isFinished: true,
     }).catch(() => {});
 
-    endBattleNow({ winnerId: opponentId, reason: 'timeout' }).catch(() => {});
-  }, [isLiveBattle, roomId, timedOut, battleFinishedReason, battleRoom?.player1Id, battleRoom?.player2Id, opponentBattleState?.userId, found.length, levelWords.length, endBattleNow]);
+    endBattleNow({ winnerId: timeoutWinnerId, reason: 'timeout' }).catch(() => {});
+  }, [isLiveBattle, roomId, timedOut, battleFinishedReason, battleRoom?.player1Id, battleRoom?.player2Id, opponentBattleState?.userId, opponentBattleState?.wordsFound, found.length, opponentFoundEntries.length, levelWords.length, endBattleNow]);
 
   // ── Reward boxes ──
   const makeRewardOptions = () => {
@@ -728,7 +746,7 @@ export default function Game() {
                   return;
                 }
 
-                router.back();
+                if (router.canGoBack()) { router.back(); } else { router.replace('/levels'); }
               }}
               style={styles.roundBtn}
             >

@@ -2,7 +2,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -108,12 +108,12 @@ export default function FriendsScreen() {
 
     { type: 'section', title: 'Search Results', icon: 'search', count: players.length },
     ...(players.length === 0
-      ? [{ type: 'empty' as const, message: 'Search for a player name above' }]
+      ? [{ type: 'empty' as const, message: search.trim() ? 'No players found — try a different name' : 'Type a name above and tap Search' }]
       : players.map((item) => ({ type: 'player' as const, item }))),
 
     { type: 'section', title: 'My Friends', icon: 'people', count: friends.length },
     ...(friends.length === 0
-      ? [{ type: 'empty' as const, message: 'No friends yet' }]
+      ? [{ type: 'empty' as const, message: 'no-friends-tip' }]
       : friends.map((item) => ({ type: 'friend' as const, item }))),
   ];
 
@@ -196,6 +196,17 @@ export default function FriendsScreen() {
             }
 
             if (item.type === 'empty') {
+              if (item.message === 'no-friends-tip') {
+                return (
+                  <View style={styles.emptyCard}>
+                    <Ionicons name="people-outline" size={36} color={Theme.textDim} />
+                    <Text style={styles.emptyCardTitle}>No friends yet</Text>
+                    <Text style={styles.emptyCardSub}>
+                      Search for players by name above and send a friend request to challenge them in Battle!
+                    </Text>
+                  </View>
+                );
+              }
               return <Text style={styles.emptyRow}>{item.message}</Text>;
             }
 
@@ -308,6 +319,9 @@ const styles = StyleSheet.create({
   sectionBadgeText: { color: Theme.primary, fontSize: 10, fontWeight: '900' },
 
   emptyRow: { color: 'rgba(200,168,122,0.45)', fontSize: 13, fontWeight: '700', textAlign: 'center', paddingVertical: 8 },
+  emptyCard: { alignItems: 'center', gap: 8, paddingVertical: 20, paddingHorizontal: 16, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.14)', marginVertical: 4 },
+  emptyCardTitle: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  emptyCardSub: { color: Theme.textDim, fontSize: 13, fontWeight: '600', textAlign: 'center', lineHeight: 19 },
 
   // Cards
   card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: 'rgba(255,150,0,0.18)' },
