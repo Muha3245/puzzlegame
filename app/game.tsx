@@ -167,6 +167,16 @@ function fmt(sec: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function fmtChatTime(ts?: number) {
+  if (!ts) return "";
+  const date = new Date(ts);
+  const h = date.getHours();
+  const m = date.getMinutes().toString().padStart(2, "0");
+  const hour12 = h % 12 || 12;
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${hour12}:${m} ${ampm}`;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function Game() {
@@ -288,6 +298,9 @@ export default function Game() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState("");
   const [chatMessages, setChatMessages] = useState<BattleChatMessage[]>([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const chatScrollRef = useRef<ScrollView | null>(null);
+  const chatOpenRef = useRef(false);
 
   // Stable refs so onFound closure never has stale uid / send fn
   const myUidRef = useRef<string | null>(null);
@@ -343,6 +356,7 @@ export default function Game() {
       setChatMessages([]);
       setChatText("");
       setChatOpen(false);
+      setUnreadChatCount(0);
       setBattleWinnerId(null);
       setBattleFinishedReason(null);
       setWaitingForOpponent(true);
@@ -350,6 +364,16 @@ export default function Game() {
       battleFinishedStateRef.current = false;
     }
   }, [roomId, isLiveBattle]);
+
+  useEffect(() => {
+    chatOpenRef.current = chatOpen;
+    if (chatOpen) {
+      setUnreadChatCount(0);
+      requestAnimationFrame(() =>
+        chatScrollRef.current?.scrollToEnd({ animated: true }),
+      );
+    }
+  }, [chatOpen, chatMessages.length]);
 
   // Animations
   const bannerPulse = useRef(new Animated.Value(0)).current;
@@ -361,7 +385,7 @@ export default function Game() {
   // ── Layout ──
   const bottomSafe = Math.max(insets.bottom, 14);
   const toolbarH = 82 + bottomSafe;
-  const gridMax = Math.min(width - 40, height * 0.45, 420);
+  const gridMax = Math.min(width - 72, height * 0.42, 390);
   const combinedFoundEntries = useMemo(() => {
     const merged: FoundEntry[] = [];
     [...found, ...opponentFoundEntries].forEach((entry) => {
@@ -660,11 +684,21 @@ export default function Game() {
     // ── Broadcast channel for live chat. This does not write anything to DB.
     const chatBroadcast = subscribeToBattleChat(roomId, (message) => {
       if (message.roomId !== roomId) return;
+
       setChatMessages((prev) => {
         if (prev.some((m) => m.id === message.id)) return prev;
-        return [...prev.slice(-19), message];
+        return [...prev.slice(-29), message];
       });
-      setChatOpen(true);
+
+      if (message.userId !== myUidRef.current && !chatOpenRef.current) {
+        setUnreadChatCount((count) => Math.min(count + 1, 99));
+      }
+
+      if (chatOpenRef.current) {
+        requestAnimationFrame(() =>
+          chatScrollRef.current?.scrollToEnd({ animated: true }),
+        );
+      }
     });
     sendBattleChat.current = chatBroadcast.send;
 
@@ -1205,9 +1239,13 @@ export default function Game() {
       createdAt: Date.now(),
     };
 
-    setChatMessages((prev) => [...prev.slice(-19), message]);
+    setChatMessages((prev) => [...prev.slice(-29), message]);
     setChatText("");
     setChatOpen(true);
+    setUnreadChatCount(0);
+    requestAnimationFrame(() =>
+      chatScrollRef.current?.scrollToEnd({ animated: true }),
+    );
     sendBattleChat.current(message);
   }, [chatText, isLiveBattle, roomId, myBattleState?.displayName]);
 
@@ -1277,6 +1315,22 @@ export default function Game() {
               </Text>
             </Animated.View>
 
+            {isLiveBattle && (
+              <Pressable
+                onPress={() => setChatOpen(true)}
+                style={styles.headerChatBtn}
+              >
+                <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
+                {unreadChatCount > 0 && (
+                  <View style={styles.headerChatBadge}>
+                    <Text style={styles.headerChatBadgeText}>
+                      {unreadChatCount > 9 ? "9+" : unreadChatCount}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            )}
+
             {/* Coin pill */}
             <Pressable
               onPress={() => router.push("/coins")}
@@ -1342,75 +1396,71 @@ export default function Game() {
               </View>
             )}
 
-            <View style={styles.chatShortcutRow}>
-              <Pressable style={styles.chatShortcutBtn} onPress={() => setChatOpen(true)}>
-                <View style={styles.chatShortcutIcon}>
-                  <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.chatShortcutTitle}>Chat</Text>
-                  <Text style={styles.chatShortcutSub}>Tap to message opponent</Text>
-                </View>
-
-                {chatMessages.length > 0 && (
-                  <View style={styles.chatCountPill}>
-                    <Text style={styles.chatCountText}>
-                      {chatMessages.length > 9 ? "9+" : chatMessages.length}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
-            </View>
-
             <Modal
               visible={chatOpen}
               transparent
-              animationType="fade"
+              animationType="slide"
               statusBarTranslucent
               onRequestClose={() => setChatOpen(false)}
             >
               <View style={styles.chatModalRoot}>
-                <Pressable style={styles.chatModalBackdrop} onPress={() => setChatOpen(false)} />
+                <Pressable
+                  style={styles.chatModalBackdrop}
+                  onPress={() => setChatOpen(false)}
+                />
 
                 <KeyboardAvoidingView
                   behavior={Platform.OS === "ios" ? "padding" : "height"}
-                  keyboardVerticalOffset={Platform.OS === "ios" ? 16 : 0}
+                  keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
                   style={styles.chatKeyboardWrap}
                 >
                   <View style={styles.chatPopupCard}>
+                    <View style={styles.chatPopupHandle} />
+
                     <View style={styles.chatPopupHeader}>
                       <View style={styles.chatHeaderLeft}>
                         <View style={styles.chatIconCircle}>
-                          <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
+                          <Ionicons name="chatbubble-ellipses" size={17} color="#fff" />
                         </View>
 
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.chatTitle}>Live Chat</Text>
-                          <Text style={styles.chatSub}>Realtime messages · not saved</Text>
+                          <Text style={styles.chatTitle}>Live Battle Chat</Text>
+                          <Text style={styles.chatSub}>Realtime only · not saved</Text>
                         </View>
                       </View>
 
-                      <Pressable style={styles.chatCloseBtn} onPress={() => setChatOpen(false)}>
+                      <Pressable
+                        style={styles.chatCloseBtn}
+                        onPress={() => setChatOpen(false)}
+                      >
                         <Ionicons name="close" size={18} color="#fff" />
                       </Pressable>
                     </View>
 
                     <ScrollView
+                      ref={chatScrollRef}
                       style={styles.chatMessages}
                       contentContainerStyle={styles.chatMessagesContent}
                       showsVerticalScrollIndicator={false}
+                      automaticallyAdjustKeyboardInsets
                       keyboardShouldPersistTaps="handled"
+                      onContentSizeChange={() =>
+                        chatScrollRef.current?.scrollToEnd({ animated: true })
+                      }
                     >
                       {chatMessages.length === 0 ? (
                         <View style={styles.chatEmptyBox}>
-                          <Ionicons
-                            name="chatbubbles-outline"
-                            size={30}
-                            color="rgba(255,255,255,0.42)"
-                          />
-                          <Text style={styles.chatEmpty}>No messages yet.</Text>
-                          <Text style={styles.chatEmptySmall}>Send a quick message to your opponent.</Text>
+                          <View style={styles.chatEmptyIcon}>
+                            <Ionicons
+                              name="chatbubbles-outline"
+                              size={32}
+                              color="rgba(255,216,122,0.92)"
+                            />
+                          </View>
+                          <Text style={styles.chatEmpty}>No messages yet</Text>
+                          <Text style={styles.chatEmptySmall}>
+                            Send a quick message to your opponent.
+                          </Text>
                         </View>
                       ) : (
                         chatMessages.map((message) => {
@@ -1420,17 +1470,54 @@ export default function Game() {
                             <View
                               key={message.id}
                               style={[
-                                styles.chatBubble,
-                                mine ? styles.chatBubbleMine : styles.chatBubbleOpponent,
+                                styles.chatMessageRow,
+                                mine
+                                  ? styles.chatMessageRowMine
+                                  : styles.chatMessageRowOpponent,
                               ]}
                             >
                               {!mine && (
-                                <Text style={styles.chatName} numberOfLines={1}>
-                                  {message.displayName}
-                                </Text>
+                                <View style={styles.chatOpponentAvatar}>
+                                  <Text style={styles.chatOpponentAvatarText}>
+                                    {(message.displayName || "O").charAt(0).toUpperCase()}
+                                  </Text>
+                                </View>
                               )}
 
-                              <Text style={styles.chatMessageText}>{message.text}</Text>
+                              <View
+                                style={[
+                                  styles.chatBubble,
+                                  mine
+                                    ? styles.chatBubbleMine
+                                    : styles.chatBubbleOpponent,
+                                ]}
+                              >
+                                {!mine && (
+                                  <Text style={styles.chatName} numberOfLines={1}>
+                                    {message.displayName || "Opponent"}
+                                  </Text>
+                                )}
+
+                                <Text style={styles.chatMessageText}>{message.text}</Text>
+
+                                <View style={styles.chatMetaRow}>
+                                  <Text
+                                    style={[
+                                      styles.chatTimeText,
+                                      mine && styles.chatTimeTextMine,
+                                    ]}
+                                  >
+                                    {fmtChatTime(message.createdAt)}
+                                  </Text>
+                                  {mine && (
+                                    <Ionicons
+                                      name="checkmark-done"
+                                      size={13}
+                                      color="rgba(255,255,255,0.72)"
+                                    />
+                                  )}
+                                </View>
+                              </View>
                             </View>
                           );
                         })
@@ -1441,12 +1528,13 @@ export default function Game() {
                       <TextInput
                         value={chatText}
                         onChangeText={setChatText}
-                        placeholder="Message..."
+                        placeholder="Write a message..."
                         placeholderTextColor="rgba(255,255,255,0.38)"
                         style={styles.chatInput}
                         maxLength={140}
                         returnKeyType="send"
                         onSubmitEditing={sendChatMessage}
+                        multiline
                       />
 
                       <Pressable
@@ -1457,7 +1545,7 @@ export default function Game() {
                         onPress={sendChatMessage}
                         disabled={!chatText.trim()}
                       >
-                        <Ionicons name="send" size={17} color="#fff" />
+                        <Ionicons name="send" size={18} color="#fff" />
                       </Pressable>
                     </View>
                   </View>
@@ -1504,12 +1592,7 @@ export default function Game() {
           </View>
 
           {/* Grid */}
-          <View style={[styles.gridGlass, { width: gridMax + 18 }]}>
-            <View pointerEvents="none" style={styles.tableRailGlow} />
-            <View pointerEvents="none" style={[styles.tablePocket, styles.tablePocketTL]} />
-            <View pointerEvents="none" style={[styles.tablePocket, styles.tablePocketTR]} />
-            <View pointerEvents="none" style={[styles.tablePocket, styles.tablePocketBL]} />
-            <View pointerEvents="none" style={[styles.tablePocket, styles.tablePocketBR]} />
+          <View style={styles.gridGlass}>
             <WordGrid
               words={levelWords}
               seed={seed}
@@ -2025,6 +2108,35 @@ const styles = StyleSheet.create({
     maxWidth: 160,
   },
   headerRight: { flexDirection: "row", gap: 6, alignItems: "center" },
+  headerChatBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(5,82,42,0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(255,216,122,0.32)",
+  },
+  headerChatBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 999,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFD86E",
+    borderWidth: 2,
+    borderColor: "#052012",
+  },
+  headerChatBadgeText: {
+    color: "#052012",
+    fontSize: 8,
+    fontWeight: "900",
+  },
   timerPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -2165,43 +2277,41 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
 
-  chatShortcutBtn: {
-    minWidth: 150,
-    maxWidth: 220,
-    minHeight: 44,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(3,34,18,0.88)",
-    borderWidth: 1,
-    borderColor: "rgba(255,216,122,0.22)",
-  },
-
-  chatShortcutIcon: {
-    width: 31,
-    height: 31,
-    borderRadius: 13,
+  chatRoundBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,216,122,0.18)",
+    backgroundColor: "rgba(5,82,42,0.96)",
     borderWidth: 1,
-    borderColor: "rgba(255,216,122,0.30)",
+    borderColor: "rgba(255,216,122,0.42)",
+    shadowColor: "#000",
+    shadowOpacity: 0.30,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 8,
   },
 
-  chatShortcutTitle: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
+  chatUnreadBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 999,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFD86E",
+    borderWidth: 2,
+    borderColor: "#052012",
   },
 
-  chatShortcutSub: {
-    color: "rgba(255,255,255,0.45)",
+  chatUnreadBadgeText: {
+    color: "#052012",
     fontSize: 9,
-    fontWeight: "700",
-    marginTop: 1,
+    fontWeight: "900",
   },
 
   chatModalRoot: {
@@ -2211,34 +2321,51 @@ const styles = StyleSheet.create({
 
   chatModalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.58)",
+    backgroundColor: "rgba(0,0,0,0.64)",
   },
 
   chatKeyboardWrap: {
+    flex: 1,
     width: "100%",
-    paddingHorizontal: 14,
-    paddingBottom: 18,
+    justifyContent: "flex-end",
+    paddingHorizontal: 10,
+    paddingBottom: Platform.OS === "ios" ? 10 : 8,
   },
 
   chatPopupCard: {
     width: "100%",
-    maxHeight: "72%",
-    borderRadius: 28,
+    maxWidth: 430,
+    alignSelf: "center",
+    height: "82%",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
     overflow: "hidden",
-    backgroundColor: "rgba(3,26,15,0.98)",
+    backgroundColor: "rgba(3,26,15,0.99)",
     borderWidth: 1,
-    borderColor: "rgba(255,216,122,0.26)",
+    borderColor: "rgba(255,216,122,0.30)",
     shadowColor: "#000",
-    shadowOpacity: 0.48,
+    shadowOpacity: 0.55,
     shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 24,
-    elevation: 22,
+    shadowRadius: 26,
+    elevation: 24,
+  },
+
+  chatPopupHandle: {
+    alignSelf: "center",
+    width: 48,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    marginTop: 9,
+    marginBottom: 2,
   },
 
   chatPopupHeader: {
-    minHeight: 58,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    minHeight: 64,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2290,128 +2417,181 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.12)",
   },
 
-  chatCountPill: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 999,
-    paddingHorizontal: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,216,122,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255,216,122,0.32)",
-  },
-
-  chatCountText: {
-    color: "#FFD86E",
-    fontSize: 10,
-    fontWeight: "900",
-  },
-
   chatMessages: {
-    maxHeight: 330,
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: "rgba(0,0,0,0.10)",
   },
 
   chatMessagesContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 8,
+    flexGrow: 1,
+    paddingHorizontal: 13,
+    paddingTop: 16,
+    paddingBottom: 18,
+    gap: 10,
   },
 
   chatEmptyBox: {
-    minHeight: 160,
+    flex: 1,
+    minHeight: 360,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 7,
+  },
+
+  chatEmptyIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,216,122,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,216,122,0.22)",
+    marginBottom: 4,
   },
 
   chatEmpty: {
-    color: "rgba(255,255,255,0.70)",
-    fontSize: 13,
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 15,
     fontWeight: "900",
     textAlign: "center",
   },
 
   chatEmptySmall: {
-    color: "rgba(255,255,255,0.42)",
-    fontSize: 11,
+    color: "rgba(255,255,255,0.44)",
+    fontSize: 12,
     fontWeight: "700",
     textAlign: "center",
   },
 
+  chatMessageRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 7,
+  },
+
+  chatMessageRowMine: {
+    justifyContent: "flex-end",
+  },
+
+  chatMessageRowOpponent: {
+    justifyContent: "flex-start",
+  },
+
+  chatOpponentAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,216,122,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,216,122,0.26)",
+    marginBottom: 2,
+  },
+
+  chatOpponentAvatarText: {
+    color: "#FFD86E",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
   chatBubble: {
-    maxWidth: "82%",
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 16,
+    maxWidth: "78%",
+    paddingHorizontal: 12,
+    paddingTop: 9,
+    paddingBottom: 6,
+    borderRadius: 18,
     borderWidth: 1,
   },
 
   chatBubbleMine: {
     alignSelf: "flex-end",
-    backgroundColor: "rgba(6,122,60,0.52)",
-    borderColor: "rgba(255,216,122,0.26)",
-    borderBottomRightRadius: 5,
+    backgroundColor: "rgba(7,139,68,0.72)",
+    borderColor: "rgba(255,216,122,0.27)",
+    borderBottomRightRadius: 6,
   },
 
   chatBubbleOpponent: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.09)",
-    borderColor: "rgba(255,255,255,0.13)",
-    borderBottomLeftRadius: 5,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.14)",
+    borderBottomLeftRadius: 6,
   },
 
   chatName: {
     color: "#FFD86E",
     fontSize: 10,
     fontWeight: "900",
-    marginBottom: 2,
+    marginBottom: 3,
   },
 
   chatMessageText: {
     color: "#fff",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 18,
+    lineHeight: 19,
+  },
+
+  chatMetaRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+  },
+
+  chatTimeText: {
+    color: "rgba(255,255,255,0.42)",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+
+  chatTimeTextMine: {
+    color: "rgba(255,255,255,0.66)",
   },
 
   chatInputRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    alignItems: "flex-end",
+    gap: 9,
+    paddingHorizontal: 13,
+    paddingTop: 11,
+    paddingBottom: Platform.OS === "ios" ? 14 : 12,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,216,122,0.14)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderTopColor: "rgba(255,216,122,0.15)",
+    backgroundColor: "rgba(0,0,0,0.28)",
   },
 
   chatInput: {
     flex: 1,
-    minHeight: 42,
-    maxHeight: 90,
-    borderRadius: 19,
-    paddingHorizontal: 13,
+    minHeight: 45,
+    maxHeight: 120,
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    paddingTop: Platform.OS === "ios" ? 12 : 9,
+    paddingBottom: Platform.OS === "ios" ? 12 : 9,
     color: "#fff",
     fontSize: 13,
     fontWeight: "700",
-    backgroundColor: "rgba(0,0,0,0.28)",
+    backgroundColor: "rgba(0,0,0,0.32)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
   },
 
   chatSendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 43,
+    height: 43,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#087B3E",
     shadowColor: "#087B3E",
-    shadowOpacity: 0.34,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.38,
+    shadowOffset: { width: 0, height: 5 },
+    shadowRadius: 10,
+    elevation: 7,
   },
 
   chatSendBtnDisabled: {
@@ -2423,7 +2603,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 18,
   },
 
   // Words
@@ -2483,9 +2663,10 @@ const styles = StyleSheet.create({
   // Grid
   gridGlass: {
     position: "relative",
+    alignSelf: "center",
     backgroundColor: "#075D33",
     borderRadius: 30,
-    padding: 9,
+    padding: 11,
     borderWidth: 8,
     borderColor: "#5D3216",
     shadowColor: "#000",
