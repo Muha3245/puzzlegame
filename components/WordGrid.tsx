@@ -3,6 +3,7 @@ import { PanResponder, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { STRIPE_COLORS } from '../constants/categories';
 import { buildPuzzle } from '../lib/puzzle';
+import { playGameSound } from '../lib/audio';
 
 export type Point = [number, number];
 
@@ -22,6 +23,7 @@ type WordGridProps = {
   onFound: (entry: FoundEntry) => void;
   width: number;
   size?: number;
+  soundEnabled?: boolean;
 };
 
 export function WordGrid({
@@ -33,6 +35,7 @@ export function WordGrid({
   onFound,
   width,
   size = 10,
+  soundEnabled = true,
 }: WordGridProps) {
   const safeWords = useMemo(
     () => words.map((word) => word.toUpperCase().trim()),
@@ -231,6 +234,8 @@ export function WordGrid({
           color,
         });
       }
+    } else if (selectedWord.length > 1) {
+      playGameSound('wrong', soundEnabled).catch(() => {});
     }
 
     setDragStart(null);
@@ -255,6 +260,7 @@ export function WordGrid({
 
         setDragStart(point);
         setDragEnd(point);
+        playGameSound('tap', soundEnabled).catch(() => {});
       },
       onPanResponderMove: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
@@ -328,6 +334,24 @@ export function WordGrid({
             />
           );
         })}
+        {dragStart && dragEnd ? (() => {
+          const fixed = normalizeLine(dragStart, dragEnd);
+          const start = centerOf(fixed.start);
+          const end = centerOf(fixed.end);
+          return (
+            <Line
+              key="active-selection"
+              x1={start.x}
+              y1={start.y}
+              x2={end.x}
+              y2={end.y}
+              stroke="#FFD23F"
+              strokeWidth={Math.max(10, cell * 0.66)}
+              strokeLinecap="round"
+              opacity={0.78}
+            />
+          );
+        })() : null}
       </Svg>
 
       {puzzle.grid.map((rowLetters, rowIndex) => (

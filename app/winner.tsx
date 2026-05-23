@@ -9,7 +9,19 @@ import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { HighlightText } from '../components/HighlightText';
 import { Theme, GlassEffects } from '../constants/theme';
 import { useAppState } from '../lib/storage';
-import { acceptBattleRoom, BattleRoom, createBattleRoom, getBattleRooms, PublicUser } from '../lib/online';
+import { playGameSound } from '../lib/audio';
+import {
+  acceptBattleRoom,
+  BattleRoom,
+  createBattleRoom,
+  getBattleRooms,
+  getCurrentUserId,
+  PublicUser,
+  rejectBattleRoom,
+  subscribeToIncomingBattles,
+} from '../lib/online';
+import { getRandomBattleLevel } from '../lib/battleHelpers';
+import { DifficultyPickerModal } from '../components/DifficultyPickerModal';
 
 export default function Winner() {
   const params = useLocalSearchParams<{
@@ -18,10 +30,43 @@ export default function Winner() {
     id?: string; categoryKey?: string; difficulty?: string; level?: string;
     isBattle?: string; title?: string; opponentId?: string; opponentName?: string;
   }>();
-  const { addCoins } = useAppState();
+  const { addCoins, state } = useAppState();
   const [rematchBusy, setRematchBusy] = useState(false);
+  const [showDiffPicker, setShowDiffPicker] = useState(false);
   const [incomingRematch, setIncomingRematch] = useState<BattleRoom | null>(null);
   const [acceptRematchBusy, setAcceptRematchBusy] = useState(false);
+  const incomingShownRef = useRef<Set<string>>(new Set());
+  const staleIncomingRoomIdsRef = useRef<Set<string>>(new Set());
+  const initialIncomingScanDoneRef = useRef(false);
+  const navigatingRef = useRef(false);
+  const [rematchStatus, setRematchStatus] = useState<string | null>(null);
+
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+  const buildBattleUrl = (room: BattleRoom) =>
+    `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(
+      room.categoryTitle,
+    )}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`;
+
+  const openBattleRoom = (room: BattleRoom) => {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
+    setIncomingRematch(null);
+    setShowDiffPicker(false);
+    setRematchStatus(null);
+    router.replace(buildBattleUrl(room));
+  };
+
+  const isIncomingFromOpponent = (room: BattleRoom) =>
+    !!params.opponentId &&
+    room.player1Id === params.opponentId &&
+    room.status === 'pending';
+
+  const isStaleIncomingRoom = (room: BattleRoom) =>
+    staleIncomingRoomIdsRef.current.has(String(room.id ?? ''));
+
+  const roomIdSortValue = (room: BattleRoom) => String(room.id ?? '');
+
 
   const winner    = params.winner ?? 'Player 1';
   const p1        = params.p1 ?? 'Player 1';
@@ -44,6 +89,8 @@ export default function Winner() {
   ).current;
 
   useEffect(() => {
+    playGameSound(iWon || isTie || !isBattle ? 'win' : 'tap', state.settings.sound);
+
     // Reward/deduct coins on mount
     if (coinDelta !== 0) addCoins(coinDelta);
 
@@ -110,46 +157,110 @@ export default function Winner() {
 
   const iconColor = isBattle && !iWon && !isTie ? Theme.danger : Theme.warn;
 
-  // Poll for incoming rematch requests from the opponent every 2.5 s.
-  // Realtime INSERT events are unreliable immediately after screen navigation
-  // (websocket reconnects), so REST polling is the safe fallback.
+  // Realtime + polling fallback for rematch requests.
+  // Important fix:
+  // When this result screen opens, old pending rooms from the previous rematch can still exist.
+  // We mark those existing rooms as stale first, then only show requests created after this screen is ready.
+  // This prevents "opponent sees rematch request" even when you did not send a new request.
   useEffect(() => {
     if (!isBattle || !params.opponentId) return;
-    const check = async () => {
+
+    let alive = true;
+    let unsub: (() => void) | undefined;
+
+    staleIncomingRoomIdsRef.current.clear();
+    incomingShownRef.current.clear();
+    initialIncomingScanDoneRef.current = false;
+    setIncomingRematch(null);
+    setRematchStatus(null);
+
+    const showIncomingRequest = (room: BattleRoom) => {
+      if (!alive || navigatingRef.current) return;
+      if (!initialIncomingScanDoneRef.current) return;
+      if (!isIncomingFromOpponent(room)) return;
+      if (isStaleIncomingRoom(room)) return;
+      if (incomingShownRef.current.has(room.id)) return;
+
+      incomingShownRef.current.add(room.id);
+      setIncomingRematch(room);
+      setRematchStatus(null);
+    };
+
+    const markExistingIncomingAsStale = async () => {
       try {
         const rooms = await getBattleRooms();
-        const hit = rooms.incoming.find((r) => r.player1Id === params.opponentId);
-        if (hit) setIncomingRematch(hit);
+
+        rooms.incoming
+          .filter((room) => room.player1Id === params.opponentId && room.status === 'pending')
+          .forEach((room) => {
+            staleIncomingRoomIdsRef.current.add(String(room.id ?? ''));
+            incomingShownRef.current.add(room.id);
+          });
+      } catch {
+      } finally {
+        if (!alive) return;
+        initialIncomingScanDoneRef.current = true;
+      }
+    };
+
+    const check = async () => {
+      try {
+        if (!initialIncomingScanDoneRef.current || navigatingRef.current) return;
+
+        const rooms = await getBattleRooms();
+        const hit = rooms.incoming.find((room) =>
+          room.player1Id === params.opponentId &&
+          room.status === 'pending' &&
+          !isStaleIncomingRoom(room)
+        );
+
+        if (hit) showIncomingRequest(hit);
       } catch {}
     };
-    check();
-    const iv = setInterval(check, 2500);
-    return () => clearInterval(iv);
+
+    markExistingIncomingAsStale().then(() => {
+      if (!alive) return;
+
+      getCurrentUserId()
+        .then((uid) => {
+          if (!alive || !uid) return;
+          unsub = subscribeToIncomingBattles(uid, showIncomingRequest);
+        })
+        .catch(() => {});
+
+      check();
+    });
+
+    const iv = setInterval(check, 900);
+
+    return () => {
+      alive = false;
+      unsub?.();
+      clearInterval(iv);
+    };
   }, [isBattle, params.opponentId]);
 
   const acceptIncomingRematch = async () => {
-    if (!incomingRematch) return;
+    playGameSound('tap', state.settings.sound);
+
+    if (!incomingRematch || navigatingRef.current) return;
+
     setAcceptRematchBusy(true);
+    setRematchStatus('Joining rematch...');
+
     try {
-      await acceptBattleRoom(incomingRematch);
-      const room = incomingRematch;
-      setIncomingRematch(null);
-      router.replace(
-        `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`,
-      );
+      const room = await acceptBattleRoom(incomingRematch);
+      openBattleRoom(room);
     } catch (e: any) {
       Alert.alert('Rematch error', e?.message || 'Could not accept rematch.');
+      setRematchStatus(null);
     } finally {
       setAcceptRematchBusy(false);
     }
   };
 
-  const sendSameLevelRematch = async () => {
-    if (!params.opponentId) {
-      Alert.alert('Rematch error', 'Opponent information is missing. Please start the rematch from Battle Arena.');
-      router.replace('/battle');
-      return;
-    }
+  const handleRematchDifficultySelect = async (difficulty: string) => {
+    if (!params.opponentId || navigatingRef.current) return;
 
     const opponent: PublicUser = {
       uid: params.opponentId,
@@ -159,24 +270,72 @@ export default function Winner() {
       levelsCompleted: 0,
     };
 
-    try {
-      setRematchBusy(true);
-      const room = await createBattleRoom({
-        friend: opponent,
-        categoryId: params.id ?? '',
-        categoryKey: params.categoryKey ?? params.id ?? '',
-        categoryTitle: typeof params.title === 'string' ? decodeURIComponent(params.title) : 'Battle',
-        difficulty: params.difficulty ?? 'easy',
-        level: Number(params.level ?? 1),
-      });
+    setRematchBusy(true);
+    setRematchStatus('Preparing rematch...');
 
-      // Immediately enter the game waiting lobby — the opponent receives the
-      // global BattleNotificationModal (in _layout.tsx) with Accept/Fight button.
-      router.replace(
-        `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`,
+    try {
+      // 1) First check whether opponent already sent a rematch.
+      // If yes, do not create another room. Show the same Accept popup like first battle.
+      const beforeRooms = await getBattleRooms();
+      const incomingBefore = beforeRooms.incoming.find(
+        (room) =>
+          room.player1Id === params.opponentId &&
+          room.status === 'pending' &&
+          !isStaleIncomingRoom(room),
       );
+
+      if (incomingBefore) {
+        setShowDiffPicker(false);
+        setIncomingRematch(incomingBefore);
+        setRematchStatus(null);
+        return;
+      }
+
+      // 2) Normal first-time-battle behavior: create a pending room.
+      const levelData = getRandomBattleLevel(difficulty);
+      const createdRoom = await createBattleRoom({ friend: opponent, ...levelData });
+
+      setShowDiffPicker(false);
+      setRematchStatus('Rematch request sent...');
+
+      // 3) Small duplicate-room protection:
+      // If both players press Rematch at the same time, both may create pending rooms.
+      // We choose one canonical room by id. The loser room is rejected and that player
+      // sees the opponent's Accept popup instead of entering a different room.
+      await sleep(650);
+
+      const afterRooms = await getBattleRooms();
+      const incomingAfter = afterRooms.incoming.find(
+        (room) =>
+          room.player1Id === params.opponentId &&
+          room.status === 'pending' &&
+          !isStaleIncomingRoom(room),
+      );
+
+      if (incomingAfter) {
+        const incomingWins = roomIdSortValue(incomingAfter) < roomIdSortValue(createdRoom);
+
+        if (incomingWins) {
+          try {
+            await rejectBattleRoom(createdRoom);
+          } catch {}
+
+          setIncomingRematch(incomingAfter);
+          setRematchStatus(null);
+          return;
+        }
+
+        try {
+          await rejectBattleRoom(incomingAfter);
+        } catch {}
+      }
+
+      // 4) Open game exactly like the first battle sender flow.
+      // Game screen will wait until opponent accepts the same room.
+      openBattleRoom(createdRoom);
     } catch (error: any) {
       Alert.alert('Rematch error', error?.message || 'Unable to send rematch.');
+      setRematchStatus(null);
     } finally {
       setRematchBusy(false);
     }
@@ -260,6 +419,16 @@ export default function Winner() {
           </View>
         )}
 
+        {isBattle && rematchStatus && !incomingRematch && (
+          <View style={styles.waitingRematchBox}>
+            <Ionicons name="time-outline" size={20} color={Theme.warn} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.waitingRematchTitle}>{rematchStatus}</Text>
+              <Text style={styles.waitingRematchSub}>Waiting for both phones to connect to the same room.</Text>
+            </View>
+          </View>
+        )}
+
         {/* Incoming rematch banner — shown when opponent sends a rematch */}
         {isBattle && incomingRematch && (
           <Pressable
@@ -281,29 +450,36 @@ export default function Winner() {
           <>
             <Pressable
               disabled={rematchBusy}
-              onPress={sendSameLevelRematch}
+              onPress={() => {
+                if (!params.opponentId) {
+                  Alert.alert('Rematch error', 'Opponent information is missing.');
+                  return;
+                }
+                playGameSound('tap', state.settings.sound);
+                setShowDiffPicker(true);
+              }}
               style={[styles.primaryBtn, rematchBusy && { opacity: 0.65 }]}
             >
               <Ionicons name="refresh" size={18} color="#fff" />
               <Text style={styles.primaryBtnText}>
-                {rematchBusy ? 'Sending...' : 'Rematch Same Level'}
+                {rematchBusy ? 'Sending...' : '⚡ Rematch'}
               </Text>
             </Pressable>
 
             <Pressable
-              onPress={() => router.replace('/levels')}
+              onPress={() => router.replace('/battle')}
               style={styles.secondaryBtn}
             >
-              <Ionicons name="grid-outline" size={18} color={Theme.textDim} />
-              <Text style={styles.secondaryBtnText}>Choose Category / Level</Text>
+              <Ionicons name="flash-outline" size={18} color={Theme.textDim} />
+              <Text style={styles.secondaryBtnText}>Battle Arena</Text>
             </Pressable>
 
             <Pressable
-              onPress={() => router.replace('/battle')}
+              onPress={() => router.replace('/levels')}
               style={styles.ghostBtn}
             >
-              <Ionicons name="flash-outline" size={16} color={Theme.primary} />
-              <Text style={styles.ghostBtnText}>Battle Arena</Text>
+              <Ionicons name="grid-outline" size={16} color={Theme.primary} />
+              <Text style={styles.ghostBtnText}>Choose Level</Text>
             </Pressable>
           </>
         ) : (
@@ -338,6 +514,12 @@ export default function Winner() {
           </>
         )}
       </ScrollView>
+
+      <DifficultyPickerModal
+        visible={showDiffPicker}
+        onClose={() => setShowDiffPicker(false)}
+        onSelect={handleRematchDifficultySelect}
+      />
     </ScreenLayout>
   );
 }
@@ -446,6 +628,30 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999,
   },
   ghostBtnText: { color: Theme.primary, fontSize: 14, fontWeight: '800' },
+
+  waitingRematchBox: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,210,63,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,210,63,0.28)',
+    borderRadius: 20,
+    padding: 15,
+    marginBottom: 10,
+  },
+  waitingRematchTitle: {
+    color: Theme.warn,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  waitingRematchSub: {
+    color: 'rgba(255,255,255,0.58)',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
 
   rematchBanner: {
     width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12,

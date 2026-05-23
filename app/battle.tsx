@@ -1,24 +1,14 @@
 // app/battle.tsx
-// Live Battle Arena — create real-time battle rooms for any category/level.
+// Simplified online Word Search Battle screen using the existing Supabase database.
 
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  ImageBackground,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AnimatedPressable } from '../components/AnimatedPressable';
+import { ScreenShell } from '../components/ScreenShell';
 import { CATEGORIES } from '../constants/categories';
-import { Theme } from '../constants/theme';
 import {
   acceptBattleRoom,
   BattleRoom,
@@ -30,10 +20,16 @@ import {
   rejectBattleRoom,
   subscribeToMyBattleList,
 } from '../lib/online';
-import { AnimatedEntry } from '../components/AnimatedEntry';
-import { SkeletonCard, SkeletonSection } from '../components/SkeletonLoader';
+import { playBattleRequestSound } from '../lib/audio';
+import { useAppState } from '../lib/storage';
 
-const BG_URI = 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?auto=format&fit=crop&w=1200&q=90';
+type DifficultyId = 'easy' | 'medium' | 'hard' | 'pro';
+const DIFFICULTIES: { id: DifficultyId; label: string; sub: string; color: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { id: 'easy', label: 'Easy', sub: 'Relaxed level', color: '#4CC38A', icon: 'leaf' },
+  { id: 'medium', label: 'Medium', sub: 'Balanced challenge', color: '#FF7A00', icon: 'flame' },
+  { id: 'hard', label: 'Hard', sub: 'Tough puzzle', color: '#FF4D8D', icon: 'flash' },
+  { id: 'pro', label: 'Pro', sub: 'Expert mode', color: '#8E6BFF', icon: 'diamond' },
+];
 
 type RoomBucket = {
   incoming: BattleRoom[];
@@ -43,65 +39,27 @@ type RoomBucket = {
 };
 
 const emptyBuckets: RoomBucket = { incoming: [], outgoing: [], active: [], completed: [] };
+const LEVELS_PER_CATEGORY = 8;
 
-function initials(name: string) {
-  return (name || 'P').trim().charAt(0).toUpperCase();
+function initials(name: string) { return (name || 'P').trim().charAt(0).toUpperCase(); }
+function randomItem<T>(items: T[]) { return items[Math.floor(Math.random() * items.length)]; }
+function pickRandomLevel(difficulty: DifficultyId) {
+  const cat = randomItem(CATEGORIES);
+  const level = Math.floor(Math.random() * LEVELS_PER_CATEGORY) + 1;
+  return { categoryId: cat.id, categoryKey: cat.id, categoryTitle: cat.name, difficulty, level };
 }
 
 export default function BattleArena() {
-  const params = useLocalSearchParams<{
-    id?: string;
-    categoryKey?: string;
-    title?: string;
-    difficulty?: string;
-    level?: string;
-  }>();
-
-  const category = CATEGORIES.find((c) => c.id === params.id) ?? CATEGORIES[0];
-  const categoryId = params.id || category.id;
-  const categoryKey = params.categoryKey || category.id;
-  const categoryTitle = typeof params.title === 'string' ? decodeURIComponent(params.title) : category.name;
-  const difficulty = params.difficulty || 'easy';
-  const level = Math.max(1, Number(params.level || 1));
-  const hasSelectedLevel = Boolean(params.level && params.id);
-
+  const { state } = useAppState();
   const [uid, setUid] = useState<string | null>(null);
   const [friends, setFriends] = useState<PublicUser[]>([]);
   const [rooms, setRooms] = useState<RoomBucket>(emptyBuckets);
+  const [difficulty, setDifficulty] = useState<DifficultyId>('easy');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [rematchSentIds, setRematchSentIds] = useState<Set<string>>(new Set());
-  const prevIncomingRef = useRef<string[]>([]);
-  const [toastMsg, setToastMsg] = useState('');
-  const toastAnim = useRef(new Animated.Value(0)).current;
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const totalBadge = rooms.incoming.length + rooms.active.length;
-
-  const showToast = useCallback((msg: string) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToastMsg(msg);
-    toastAnim.setValue(0);
-    Animated.spring(toastAnim, { toValue: 1, friction: 6, tension: 80, useNativeDriver: true }).start();
-    toastTimer.current = setTimeout(() => {
-      Animated.timing(toastAnim, { toValue: 0, duration: 400, useNativeDriver: true }).start(() => setToastMsg(''));
-    }, 2600);
-  }, [toastAnim]);
-
-  const friendBattleCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    [...rooms.incoming, ...rooms.active, ...rooms.outgoing].forEach((r) => {
-      const oppId = uid === r.player1Id ? r.player2Id : r.player1Id;
-      map[oppId] = (map[oppId] || 0) + 1;
-    });
-    return map;
-  }, [rooms.incoming, rooms.active, rooms.outgoing, uid]);
-
-  const titleLine = useMemo(() => {
-    if (!hasSelectedLevel) return 'Choose a friend and start a live room';
-    return `${categoryTitle} • ${difficulty.toUpperCase()} • Level ${level}`;
-  }, [hasSelectedLevel, categoryTitle, difficulty, level]);
+  const counts = useMemo(() => rooms.incoming.length + rooms.outgoing.length + rooms.active.length, [rooms]);
 
   const load = useCallback(async () => {
     try {
@@ -112,7 +70,7 @@ export default function BattleArena() {
       setFriends(friendRows);
       setRooms(roomRows);
     } catch (error: any) {
-      Alert.alert('Battle error', error?.message || 'Unable to load battle arena.');
+      Alert.alert('Battle error', error?.message || 'Unable to load battles.');
     } finally {
       setLoading(false);
     }
@@ -120,53 +78,30 @@ export default function BattleArena() {
 
   useFocusEffect(
     useCallback(() => {
-      // `active` prevents a stale .then() from subscribing after the screen blurs.
-      // Without this, the channel is created but never cleaned up, causing the
-      // "cannot add callbacks after subscribe()" Supabase error on next focus.
       let active = true;
       let unsub: (() => void) | undefined;
-
       load();
       getCurrentUserId().then((current) => {
         if (!active || !current) return;
         unsub = subscribeToMyBattleList(current, load);
       }).catch(() => {});
-
-      return () => {
-        active = false;
-        unsub?.();
-      };
+      return () => { active = false; unsub?.(); };
     }, [load]),
   );
 
-  // Track incoming IDs so the global _layout.tsx notification can deduplicate
-  useEffect(() => {
-    prevIncomingRef.current = rooms.incoming.map((r) => r.id);
-  }, [rooms.incoming]);
+  const openRoom = (room: BattleRoom) => {
+    router.push(`/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`);
+  };
 
   const challenge = async (friend: PublicUser) => {
-    if (!hasSelectedLevel) {
-      Alert.alert('Select level first', 'Open Levels, select any level, then tap Battle Friend.');
-      return;
-    }
-
     try {
       setBusyId(friend.uid);
-      const room = await createBattleRoom({
-        friend,
-        categoryId,
-        categoryKey,
-        categoryTitle,
-        difficulty,
-        level,
-      });
-      // Navigate immediately — player 1 waits in the game lobby for opponent to accept.
-      // Do NOT await load() here: subscribeToMyBattleList fires anyway, and the delay
-      // caused the screen to never navigate (bug fix).
-      showToast(`⚡ Entering battle lobby…`);
+      const pick = pickRandomLevel(difficulty);
+      const room = await createBattleRoom({ friend, ...pick });
+      playBattleRequestSound(state.settings.sound).catch(() => {});
       openRoom(room);
     } catch (error: any) {
-      Alert.alert('Challenge error', error?.message || 'Unable to send battle challenge.');
+      Alert.alert('Challenge error', error?.message || 'Unable to send battle request.');
     } finally {
       setBusyId(null);
     }
@@ -176,10 +111,6 @@ export default function BattleArena() {
     try {
       setBusyId(room.id);
       await acceptBattleRoom(room);
-      // Navigate immediately — do NOT await load() before openRoom().
-      // load() triggers subscribeToMyBattleList which fires its own load(), creating a
-      // double-reload race that prevented the router.push from executing (bug fix).
-      showToast('🔥 Battle accepted! Get ready!');
       openRoom(room);
     } catch (error: any) {
       Alert.alert('Accept error', error?.message || 'Unable to accept battle.');
@@ -192,7 +123,6 @@ export default function BattleArena() {
     try {
       setBusyId(room.id);
       await rejectBattleRoom(room);
-      showToast('❌ Battle declined');
       await load();
     } catch (error: any) {
       Alert.alert('Reject error', error?.message || 'Unable to reject battle.');
@@ -201,13 +131,8 @@ export default function BattleArena() {
     }
   };
 
-  const openRoom = (room: BattleRoom) => {
-    router.push(
-      `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`,
-    );
-  };
-
   const rematch = async (room: BattleRoom) => {
+    if (!uid) return;
     const friend: PublicUser = {
       uid: uid === room.player1Id ? room.player2Id : room.player1Id,
       displayName: uid === room.player1Id ? room.player2Name : room.player1Name,
@@ -215,19 +140,10 @@ export default function BattleArena() {
       totalScore: 0,
       levelsCompleted: 0,
     };
-
     try {
       setBusyId(room.id);
-      const nextRoom = await createBattleRoom({
-        friend,
-        categoryId: room.categoryId,
-        categoryKey: room.categoryKey,
-        categoryTitle: room.categoryTitle,
-        difficulty: room.difficulty,
-        level: room.level,
-      });
-      setRematchSentIds((prev) => new Set([...prev, room.id]));
-      showToast('🔄 Rematch sent! Entering battle…');
+      const pick = pickRandomLevel((room.difficulty as DifficultyId) || difficulty);
+      const nextRoom = await createBattleRoom({ friend, ...pick });
       openRoom(nextRoom);
     } catch (error: any) {
       Alert.alert('Rematch error', error?.message || 'Unable to create rematch.');
@@ -236,395 +152,141 @@ export default function BattleArena() {
     }
   };
 
-  const nextLevelBattle = async (room: BattleRoom) => {
-    const friend: PublicUser = {
-      uid: uid === room.player1Id ? room.player2Id : room.player1Id,
-      displayName: uid === room.player1Id ? room.player2Name : room.player1Name,
-      coins: 0,
-      totalScore: 0,
-      levelsCompleted: 0,
-    };
-
-    try {
-      setBusyId(room.id);
-      const nextRoom = await createBattleRoom({
-        friend,
-        categoryId: room.categoryId,
-        categoryKey: room.categoryKey,
-        categoryTitle: room.categoryTitle,
-        difficulty: room.difficulty,
-        level: Math.min(room.level + 1, 8),
-      });
-      showToast(`⬆️ Next level challenge sent!`);
-      openRoom(nextRoom);
-    } catch (error: any) {
-      Alert.alert('Next level error', error?.message || 'Unable to create next level battle.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   return (
-    <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
-      <View style={styles.overlay} />
-      <View style={styles.orb1} />
-      <View style={styles.orb2} />
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/levels')} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </Pressable>
+    <ScreenShell title="Online Battle" subtitle="Word Search battles use your existing Supabase database">
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <View style={styles.heroIcon}><Ionicons name="flash" size={28} color="#fff" /></View>
           <View style={{ flex: 1 }}>
-            <View style={styles.titleRow}>
-              <Ionicons name="flash" size={22} color={Theme.warn} />
-              <Text style={styles.title}>Battle Arena</Text>
-              {totalBadge > 0 && (
-                <View style={styles.bigBadge}><Text style={styles.bigBadgeText}>{totalBadge}</Text></View>
-              )}
-            </View>
-            <Text style={styles.sub}>{titleLine}</Text>
+            <Text style={styles.heroTitle}>Choose difficulty first</Text>
+            <Text style={styles.heroSub}>When you tap Battle, a random level is selected automatically and saved in the battle room.</Text>
           </View>
+          {counts > 0 ? <View style={styles.countBadge}><Text style={styles.countText}>{counts}</Text></View> : null}
         </View>
 
-        {/* Animated toast banner */}
-        {toastMsg ? (
-          <Animated.View
-            style={[
-              styles.toast,
-              {
-                opacity: toastAnim,
-                transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-14, 0] }) }],
-              },
-            ]}
-          >
-            <Text style={styles.toastText}>{toastMsg}</Text>
-          </Animated.View>
-        ) : null}
+        <View style={styles.diffGrid}>
+          {DIFFICULTIES.map((d) => (
+            <AnimatedPressable key={d.id} style={[styles.diffCard, difficulty === d.id && { backgroundColor: d.color, borderColor: d.color }]} onPress={() => setDifficulty(d.id)}>
+              <Ionicons name={d.icon} size={22} color="#fff" />
+              <Text style={styles.diffLabel}>{d.label}</Text>
+              <Text style={styles.diffSub}>{d.sub}</Text>
+            </AnimatedPressable>
+          ))}
+        </View>
 
-        {loading ? (
-          <View style={{ paddingHorizontal: 18, paddingTop: 8 }}>
-            <SkeletonSection />
-            {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={`in-${i}`} />)}
-            <SkeletonSection />
-            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={`fr-${i}`} />)}
+        {loading ? <ActivityIndicator color="#fff" size="large" style={{ marginVertical: 30 }} /> : null}
+
+        <Section title="Friends" count={friends.length} />
+        {!loading && friends.length === 0 ? <Empty text="Add friends first from Friends screen, then start battles here." /> : null}
+        {friends.map((friend) => (
+          <View key={friend.uid} style={styles.friendCard}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{initials(friend.displayName)}</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{friend.displayName}</Text>
+              <Text style={styles.cardMeta}>Random {difficulty.toUpperCase()} Word Search</Text>
+            </View>
+            <AnimatedPressable disabled={busyId === friend.uid} style={styles.battleBtn} onPress={() => challenge(friend)}>
+              {busyId === friend.uid ? <ActivityIndicator color="#fff" /> : <Text style={styles.battleText}>Battle</Text>}
+            </AnimatedPressable>
           </View>
-        ) : (
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        ))}
 
-            {/* ── 1. Choose Level card — always at top ── */}
-            <AnimatedEntry from="bottom" delay={0}>
-            <View style={styles.infoCard}>
-              <View style={styles.infoIconRow}>
-                <Ionicons name="flash" size={22} color={Theme.warn} />
-                <Text style={styles.infoTitle}>
-                  {hasSelectedLevel ? `⚡ ${categoryTitle} • ${difficulty.toUpperCase()} • Lv ${level}` : 'How to Battle'}
-                </Text>
-              </View>
-              {!hasSelectedLevel && (
-                <Text style={styles.infoText}>
-                  Go to Levels → pick a category → tap <Text style={{ color: Theme.warn, fontWeight: '900' }}>Battle</Text> on any level card. Both players solve the exact same puzzle. Whoever finds the most words wins coins!
-                </Text>
-              )}
-              <Pressable onPress={() => router.push('/levels')} style={styles.primaryBtn}>
-                <Ionicons name="grid-outline" size={16} color="#fff" />
-                <Text style={styles.primaryBtnText}>{hasSelectedLevel ? 'Change Level' : 'Choose Level'}</Text>
-              </Pressable>
+        <Section title="Incoming Requests" count={rooms.incoming.length} />
+        {rooms.incoming.length === 0 ? <Empty text="No incoming battles." /> : rooms.incoming.map((room) => (
+          <RoomCard key={room.id} room={room} uid={uid} busy={busyId === room.id} footer={
+            <View style={styles.rowActions}>
+              <AnimatedPressable style={[styles.actionBtn, styles.accept]} onPress={() => accept(room)}><Text style={styles.actionText}>Accept</Text></AnimatedPressable>
+              <AnimatedPressable style={[styles.actionBtn, styles.reject]} onPress={() => reject(room)}><Text style={styles.actionText}>Decline</Text></AnimatedPressable>
             </View>
-            </AnimatedEntry>
+          } />
+        ))}
 
-            {/* ── 2. Battle Twists ── */}
-            <AnimatedEntry from="bottom" delay={60}>
-            <View style={styles.twistsCard}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                <Ionicons name="flash" size={16} color={Theme.warn} />
-                <Text style={styles.twistsTitle}>Battle Twists</Text>
-              </View>
-              <Text style={styles.twistsSubtitle}>Use in-game power-ups to gain the edge</Text>
-              <View style={styles.twistsList}>
-                {[
-                  { icon: 'snow-outline' as const, label: 'Freeze', desc: 'Pause your own timer for 10s', cost: 30 },
-                  { icon: 'flash-outline' as const, label: 'Hint', desc: 'Reveal the start of a hidden word', cost: 20 },
-                  { icon: 'eye-outline' as const, label: 'Reveal', desc: 'Auto-complete a hidden word for you', cost: 80 },
-                ].map((t) => (
-                  <View key={t.label} style={styles.twistItem}>
-                    <View style={styles.twistIcon}>
-                      <Ionicons name={t.icon} size={18} color={Theme.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.twistItemLabel}>{t.label}</Text>
-                      <Text style={styles.twistItemDesc}>{t.desc}</Text>
-                    </View>
-                    <View style={styles.twistCostBadge}>
-                      <Ionicons name="logo-bitcoin" size={10} color={Theme.warn} />
-                      <Text style={styles.twistCostText}>{t.cost}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-            </AnimatedEntry>
+        <Section title="Sent Requests" count={rooms.outgoing.length} />
+        {rooms.outgoing.length === 0 ? <Empty text="No pending sent battles." /> : rooms.outgoing.map((room) => (
+          <RoomCard key={room.id} room={room} uid={uid} busy={busyId === room.id} footer={<Text style={styles.waiting}>Waiting for opponent...</Text>} />
+        ))}
 
-            {/* ── 3. Challenge Friends ── */}
-            <AnimatedEntry from="bottom" delay={120}>
-            <Section title="👥 Challenge Friends" count={friends.length} />
-            {friends.length === 0 ? <Empty text="Add friends first, then start battles here." /> : friends.map((friend, i) => (
-              <AnimatedEntry key={friend.uid} delay={i * 50}>
-              <View style={styles.friendCard}>
-                <View style={styles.avatar}><Text style={styles.avatarText}>{initials(friend.displayName)}</Text></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{friend.displayName}</Text>
-                  <Text style={styles.cardMeta}>{hasSelectedLevel ? titleLine : 'Select a level first'}</Text>
-                </View>
-                <Pressable disabled={busyId === friend.uid} onPress={() => challenge(friend)} style={[styles.challengeBtn, !hasSelectedLevel && styles.disabledBtn]}>
-                  {busyId === friend.uid ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <>
-                      <Text style={styles.challengeText}>⚡ Battle</Text>
-                      {(friendBattleCounts[friend.uid] ?? 0) > 0 && (
-                        <View style={styles.friendCountBadge}>
-                          <Text style={styles.friendCountText}>{friendBattleCounts[friend.uid]}</Text>
-                        </View>
-                      )}
-                    </>
-                  )}
-                </Pressable>
-              </View>
-              </AnimatedEntry>
-            ))}
-            </AnimatedEntry>
+        <Section title="Active Battles" count={rooms.active.length} />
+        {rooms.active.length === 0 ? <Empty text="No active battles right now." /> : rooms.active.map((room) => (
+          <RoomCard key={room.id} room={room} uid={uid} busy={busyId === room.id} footer={
+            <AnimatedPressable style={styles.continueBtn} onPress={() => openRoom(room)}><Text style={styles.continueText}>Continue Battle</Text></AnimatedPressable>
+          } />
+        ))}
 
-            {/* ── 4. Incoming Requests ── */}
-            <AnimatedEntry from="bottom" delay={180}>
-            <Section title="📥 Incoming Requests" count={rooms.incoming.length} />
-            {rooms.incoming.length === 0 ? <Empty text="No incoming battles" /> : rooms.incoming.map((room, i) => (
-              <AnimatedEntry key={room.id} delay={i * 55}>
-              <RoomCard
-                room={room}
-                uid={uid}
-                busy={busyId === room.id}
-                footer={
-                  <View style={styles.actionsRow}>
-                    <Pressable onPress={() => accept(room)} style={styles.acceptBtn}><Text style={styles.btnText}>✅ Accept</Text></Pressable>
-                    <Pressable onPress={() => reject(room)} style={styles.rejectBtn}><Text style={styles.btnText}>✕ Decline</Text></Pressable>
-                  </View>
-                }
-              />
-              </AnimatedEntry>
-            ))}
-            </AnimatedEntry>
-
-            {/* ── 5. Active Live Battles — at the bottom above completed ── */}
-            <AnimatedEntry from="bottom" delay={210}>
-            <Section title="⚡ Active Battles" count={rooms.active.length} />
-            {rooms.active.length === 0 ? <Empty text="No active battles right now" /> : rooms.active.map((room, i) => (
-              <AnimatedEntry key={room.id} delay={i * 55}>
-              <RoomCard
-                room={room}
-                uid={uid}
-                busy={busyId === room.id}
-                footer={
-                  <Pressable onPress={() => openRoom(room)} style={styles.primaryBtn}>
-                    <Text style={styles.primaryBtnText}>▶ Continue Battle</Text>
-                  </Pressable>
-                }
-              />
-              </AnimatedEntry>
-            ))}
-            </AnimatedEntry>
-
-            <AnimatedEntry from="bottom" delay={270}>
-            {/* ── 6. Completed battles — collapsed by default, always at the bottom ── */}
-            <Pressable
-              onPress={() => setShowCompleted((v) => !v)}
-              style={styles.sectionHeader}
-            >
-              <Text style={styles.sectionTitle}>🏁 Completed Battles</Text>
-              <View style={styles.sectionBadge}>
-                <Text style={styles.sectionBadgeText}>{rooms.completed.length}</Text>
-              </View>
-              <Ionicons
-                name={showCompleted ? 'chevron-up-outline' : 'chevron-down-outline'}
-                size={16}
-                color={Theme.textDim}
-                style={{ marginLeft: 'auto' }}
-              />
-            </Pressable>
-
-            {showCompleted && (
-              rooms.completed.length === 0
-                ? <Empty text="Completed battles will appear here." />
-                : rooms.completed.slice(0, 15).map((room, i) => (
-                  <AnimatedEntry key={room.id} delay={i * 40}>
-                  <CompletedRoomCard
-                    room={room}
-                    uid={uid}
-                    rematchSent={rematchSentIds.has(room.id)}
-                    onRematch={() => rematch(room)}
-                    onNext={() => nextLevelBattle(room)}
-                    busy={busyId === room.id}
-                  />
-                  </AnimatedEntry>
-                ))
-            )}
-            </AnimatedEntry>
-
-            <View style={{ height: 40 }} />
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    </ImageBackground>
+        <AnimatedPressable style={styles.completedHeader} onPress={() => setShowCompleted((v) => !v)}>
+          <Text style={styles.sectionTitle}>Completed Battles</Text>
+          <View style={styles.sectionBadge}><Text style={styles.sectionBadgeText}>{rooms.completed.length}</Text></View>
+          <Ionicons name={showCompleted ? 'chevron-up' : 'chevron-down'} size={18} color="rgba(255,255,255,0.65)" />
+        </AnimatedPressable>
+        {showCompleted && (rooms.completed.length === 0 ? <Empty text="Completed battles will appear here." /> : rooms.completed.slice(0, 15).map((room) => (
+          <RoomCard key={room.id} room={room} uid={uid} busy={busyId === room.id} footer={
+            <AnimatedPressable style={styles.continueBtn} onPress={() => rematch(room)}><Text style={styles.continueText}>Random Rematch</Text></AnimatedPressable>
+          } />
+        )))}
+      </ScrollView>
+    </ScreenShell>
   );
 }
 
 function Section({ title, count }: { title: string; count: number }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionBadge}><Text style={styles.sectionBadgeText}>{count}</Text></View>
-    </View>
-  );
+  return <View style={styles.section}><Text style={styles.sectionTitle}>{title}</Text><View style={styles.sectionBadge}><Text style={styles.sectionBadgeText}>{count}</Text></View></View>;
 }
 
-function Empty({ text }: { text: string }) {
-  return <Text style={styles.empty}>{text}</Text>;
-}
+function Empty({ text }: { text: string }) { return <View style={styles.empty}><Text style={styles.emptyText}>{text}</Text></View>; }
 
-function RoomCard({ room, uid, footer, busy }: { room: BattleRoom; uid: string | null; footer: React.ReactNode; busy?: boolean }) {
-  const opponentName = uid === room.player1Id ? room.player2Name : room.player1Name;
+function RoomCard({ room, uid, busy, footer }: { room: BattleRoom; uid: string | null; busy: boolean; footer?: React.ReactNode }) {
+  const opponent = uid === room.player1Id ? room.player2Name : room.player1Name;
   return (
     <View style={styles.roomCard}>
-      <View style={styles.roomTop}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{initials(opponentName)}</Text></View>
+      <View style={styles.roomRow}>
+        <View style={styles.avatar}><Text style={styles.avatarText}>{initials(opponent)}</Text></View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>You vs {opponentName}</Text>
-          <Text style={styles.cardMeta}>{room.categoryTitle} • {room.difficulty.toUpperCase()} • Level {room.level}</Text>
-          <Text style={styles.statusText}>Status: {room.status.replace('_', ' ')}</Text>
+          <Text style={styles.cardTitle}>{opponent}</Text>
+          <Text style={styles.cardMeta}>{room.categoryTitle} • {room.difficulty.toUpperCase()} • Lv {room.level}</Text>
+          <Text style={styles.status}>{room.status.replace('_', ' ').toUpperCase()}</Text>
         </View>
-        {busy && <ActivityIndicator color={Theme.primary} />}
+        {busy ? <ActivityIndicator color="#fff" size="small" /> : null}
       </View>
-      {footer}
-    </View>
-  );
-}
-
-function CompletedRoomCard({
-  room, uid, onRematch, onNext, busy, rematchSent,
-}: {
-  room: BattleRoom; uid: string | null; onRematch: () => void;
-  onNext: () => void; busy?: boolean; rematchSent?: boolean;
-}) {
-  const opponentName = uid === room.player1Id ? room.player2Name : room.player1Name;
-  const iWon = room.winnerId && room.winnerId === uid;
-  const isDraw = !room.winnerId;
-  const result = isDraw ? 'Draw' : iWon ? '🏆 You won!' : `${opponentName} won`;
-  const resultColor = isDraw ? Theme.warn : iWon ? Theme.success : Theme.danger;
-
-  return (
-    <View style={styles.roomCard}>
-      <View style={styles.roomTop}>
-        <View style={[styles.avatar, iWon ? styles.goldAvatar : isDraw ? styles.drawAvatar : styles.lossAvatar]}>
-          <Ionicons
-            name={iWon ? 'trophy' : isDraw ? 'ribbon-outline' : 'skull-outline'}
-            size={20}
-            color="#fff"
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.cardTitle, { color: resultColor }]}>{result}</Text>
-          <Text style={styles.cardMeta}>
-            {room.categoryTitle} • {room.difficulty.toUpperCase()} • Level {room.level}
-          </Text>
-        </View>
-        {busy && <ActivityIndicator color={Theme.primary} />}
-      </View>
-
-      {rematchSent ? (
-        <View style={styles.rematchSentPill}>
-          <Ionicons name="checkmark-circle" size={14} color={Theme.success} />
-          <Text style={styles.rematchSentText}>Rematch sent — waiting for opponent</Text>
-        </View>
-      ) : (
-        <View style={styles.actionsRow}>
-          <Pressable onPress={onRematch} disabled={busy} style={[styles.acceptBtn, busy && { opacity: 0.6 }]}>
-            <Text style={styles.btnText}>Rematch</Text>
-          </Pressable>
-          <Pressable onPress={onNext} disabled={busy} style={[styles.nextBtn, busy && { opacity: 0.6 }]}>
-            <Text style={styles.btnText}>Next Level</Text>
-          </Pressable>
-        </View>
-      )}
+      {footer ?? null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#0D0500' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(13,5,0,0.82)' },
-  orb1: { position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,100,0,0.13)' },
-  orb2: { position: 'absolute', bottom: 40, left: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,60,0,0.09)' },
-  safe: { flex: 1 },
-  header: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  backBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,120,0,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,150,0,0.25)' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { color: '#fff', fontSize: 24, fontWeight: '900' },
-  sub: { color: Theme.textDim, marginTop: 2, fontWeight: '700' },
-  bigBadge: { minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 7, backgroundColor: '#ff3b69', alignItems: 'center', justifyContent: 'center' },
-  bigBadgeText: { color: '#fff', fontWeight: '900', fontSize: 12 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { paddingHorizontal: 18, paddingBottom: 20 },
-  infoCard: { padding: 18, borderRadius: 26, backgroundColor: 'rgba(255,120,0,0.10)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.22)', marginBottom: 16 },
-  infoIconRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  infoTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  infoText: { color: Theme.textDim, lineHeight: 20, marginBottom: 14 },
-
-  twistsCard: { padding: 18, borderRadius: 26, backgroundColor: 'rgba(255,120,0,0.08)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.22)', marginBottom: 16 },
-  twistsTitle: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  twistsSubtitle: { color: Theme.textDim, fontSize: 12, marginBottom: 14, fontWeight: '700' },
-  twistsList: { gap: 10 },
-  twistItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  twistIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,120,0,0.18)', alignItems: 'center', justifyContent: 'center' },
-  twistItemLabel: { color: '#fff', fontSize: 13, fontWeight: '900' },
-  twistItemDesc: { color: Theme.textDim, fontSize: 11, fontWeight: '700', marginTop: 1 },
-  twistCostBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(255,210,63,0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,210,63,0.3)' },
-  twistCostText: { color: Theme.warn, fontSize: 11, fontWeight: '900' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 18, marginBottom: 10, gap: 8 },
-  sectionTitle: { color: '#fff', fontWeight: '900', fontSize: 16 },
-  sectionBadge: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,120,0,0.20)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7, borderWidth: 1, borderColor: 'rgba(255,150,0,0.30)' },
-  sectionBadgeText: { color: Theme.primary, fontWeight: '900', fontSize: 12 },
-  empty: { color: Theme.textDim, padding: 14, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.07)', overflow: 'hidden' },
-  friendCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.18)', marginBottom: 10 },
-  roomCard: { padding: 14, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.18)', marginBottom: 10 },
-  roomTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,120,0,0.22)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.35)' },
-  goldAvatar: { backgroundColor: 'rgba(255,190,55,0.35)' },
-  drawAvatar: { backgroundColor: 'rgba(255,210,63,0.22)' },
-  lossAvatar: { backgroundColor: 'rgba(247,108,108,0.25)' },
+  content: { padding: 18, paddingBottom: 36, gap: 12 },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 28, padding: 16, backgroundColor: 'rgba(255,255,255,0.13)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  heroIcon: { width: 58, height: 58, borderRadius: 22, backgroundColor: '#FF7A00', alignItems: 'center', justifyContent: 'center' },
+  heroTitle: { color: '#fff', fontSize: 19, fontWeight: '900' },
+  heroSub: { color: 'rgba(255,255,255,0.68)', fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 4 },
+  countBadge: { minWidth: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF4D8D' },
+  countText: { color: '#fff', fontWeight: '900' },
+  diffGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  diffCard: { flex: 1, minWidth: '44%', borderRadius: 22, padding: 14, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  diffLabel: { color: '#fff', fontWeight: '900', fontSize: 16, marginTop: 8 },
+  diffSub: { color: 'rgba(255,255,255,0.70)', fontWeight: '700', fontSize: 11, marginTop: 2 },
+  section: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  completedHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingVertical: 10 },
+  sectionTitle: { color: '#fff', fontWeight: '900', fontSize: 17 },
+  sectionBadge: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  sectionBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  friendCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 24, padding: 13, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  roomCard: { borderRadius: 24, padding: 14, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', gap: 12 },
+  roomRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: { width: 46, height: 46, borderRadius: 18, backgroundColor: '#4CC38A', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontWeight: '900', fontSize: 18 },
-  cardTitle: { color: '#fff', fontWeight: '900', fontSize: 15 },
-  cardMeta: { color: Theme.textDim, fontSize: 12, marginTop: 3, fontWeight: '700' },
-  statusText: { color: Theme.primary, fontSize: 12, marginTop: 4, fontWeight: '800', textTransform: 'capitalize' },
-  challengeBtn: { paddingHorizontal: 14, height: 40, borderRadius: 20, backgroundColor: Theme.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 },
-  challengeText: { color: '#fff', fontWeight: '900' },
-  friendCountBadge: { minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  friendCountText: { color: Theme.primary, fontWeight: '900', fontSize: 11 },
-  toast: {
-    marginHorizontal: 18, marginBottom: 8,
-    backgroundColor: 'rgba(255,100,0,0.93)',
-    borderRadius: 18, paddingHorizontal: 18, paddingVertical: 11,
-    alignItems: 'center',
-    shadowColor: Theme.primary, shadowOpacity: 0.55, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 8,
-    borderWidth: 1, borderColor: 'rgba(255,200,100,0.3)',
-  },
-  toastText: { color: '#fff', fontWeight: '900', fontSize: 14, textAlign: 'center' },
-  disabledBtn: { opacity: 0.55 },
-  primaryBtn: { height: 44, borderRadius: 22, backgroundColor: Theme.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, flexDirection: 'row', gap: 6, shadowColor: Theme.primary, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 5 },
-  primaryBtnText: { color: '#fff', fontWeight: '900' },
-  actionsRow: { flexDirection: 'row', gap: 10 },
-  acceptBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: Theme.success, alignItems: 'center', justifyContent: 'center' },
-  rejectBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: Theme.danger, alignItems: 'center', justifyContent: 'center' },
-  nextBtn: { flex: 1, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,120,0,0.70)', alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: '#fff', fontWeight: '900' },
-  rematchSentPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(74,204,138,0.12)', borderWidth: 1, borderColor: 'rgba(74,204,138,0.3)' },
-  rematchSentText: { color: Theme.success, fontSize: 13, fontWeight: '800' },
+  cardTitle: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  cardMeta: { color: 'rgba(255,255,255,0.64)', fontWeight: '700', fontSize: 12, marginTop: 2 },
+  status: { color: '#FFD23F', fontWeight: '900', fontSize: 10, marginTop: 5 },
+  battleBtn: { backgroundColor: '#FF7A00', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 11, minWidth: 82, alignItems: 'center' },
+  battleText: { color: '#fff', fontWeight: '900' },
+  rowActions: { flexDirection: 'row', gap: 8 },
+  actionBtn: { flex: 1, alignItems: 'center', borderRadius: 16, paddingVertical: 11 },
+  accept: { backgroundColor: '#4CC38A' },
+  reject: { backgroundColor: '#FF4D8D' },
+  actionText: { color: '#fff', fontWeight: '900' },
+  continueBtn: { backgroundColor: '#fff', borderRadius: 16, alignItems: 'center', paddingVertical: 12 },
+  continueText: { color: '#120F2D', fontWeight: '900' },
+  waiting: { color: 'rgba(255,255,255,0.66)', fontWeight: '800' },
+  empty: { borderRadius: 18, padding: 14, backgroundColor: 'rgba(255,255,255,0.08)' },
+  emptyText: { color: 'rgba(255,255,255,0.58)', fontWeight: '700', textAlign: 'center' },
 });

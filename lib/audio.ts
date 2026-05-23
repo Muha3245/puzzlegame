@@ -1,127 +1,91 @@
 // lib/audio.ts
-// Full-app background music + game sound effects.
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
-import { Audio } from 'expo-av';
-import type { MusicTheme } from './storage';
-
-type SoundName = 'tap' | 'wordFound' | 'win';
+type AudioPlayer = ReturnType<typeof createAudioPlayer>;
+export type SoundName = 'tap' | 'wordFound' | 'win' | 'wrong' | 'draw' | 'lose' | 'battleRequest';
 
 const SOUND_FILES: Record<SoundName, any> = {
   tap: require('../assets/sounds/tap.wav'),
   wordFound: require('../assets/sounds/word-found.wav'),
   win: require('../assets/sounds/win.wav'),
+  wrong: require('../assets/sounds/wrong.wav'),
+  draw: require('../assets/sounds/draw.wav'),
+  lose: require('../assets/sounds/lose.wav'),
+  battleRequest: require('../assets/sounds/battle-request.wav'),
 };
 
-const MUSIC_FILES: Record<MusicTheme, any> = {
-  relax: require('../assets/sounds/relax-loop.wav'),
-  candy: require('../assets/sounds/candy-loop.wav'),
-  forest: require('../assets/sounds/forest-loop.wav'),
-  puzzle: require('../assets/sounds/puzzle-loop.wav'),
-};
-
-let music: Audio.Sound | null = null;
-let currentTheme: MusicTheme | null = null;
 let audioReady = false;
+const soundCache: Partial<Record<SoundName, AudioPlayer>> = {};
 
-const soundCache: Partial<Record<SoundName, Audio.Sound>> = {};
+function getSoundVolume(name: SoundName) {
+  if (name === 'tap') return 0.28;
+  if (name === 'wrong') return 0.45;
+  if (name === 'draw') return 0.45;
+  if (name === 'battleRequest') return 0.70;
+  return 0.65;
+}
 
 async function setupAudio() {
   if (audioReady) return;
-
   audioReady = true;
-
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: true,
-    staysActiveInBackground: false,
-    shouldDuckAndroid: true,
-  });
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'mixWithOthers',
+    });
+  } catch {
+    // Keep game running even if audio session setup is unavailable on a platform.
+  }
 }
 
-export async function playRelaxMusic(enabled: boolean, theme: MusicTheme = 'relax', volume = 0.5) {
+function releasePlayer(player: AudioPlayer | null | undefined) {
+  if (!player) return;
+  try { player.pause(); } catch {}
+  try { player.remove(); } catch {}
+}
+
+export async function preloadSounds() {
   try {
     await setupAudio();
-
-    if (!enabled) {
-      if (music) {
-        await music.stopAsync().catch(() => {});
-        await music.unloadAsync().catch(() => {});
-        music = null;
-        currentTheme = null;
-      }
-      return;
-    }
-
-    if (music && currentTheme !== theme) {
-      await music.stopAsync().catch(() => {});
-      await music.unloadAsync().catch(() => {});
-      music = null;
-      currentTheme = null;
-    }
-
-    if (!music) {
-      const created = await Audio.Sound.createAsync(MUSIC_FILES[theme], {
-        isLooping: true,
-        volume: Math.max(0, Math.min(1, volume)),
-        shouldPlay: true,
-      });
-
-      music = created.sound;
-      currentTheme = theme;
-      return;
-    }
-
-    const status = await music.getStatusAsync();
-
-    if (status.isLoaded && !status.isPlaying) {
-      await music.playAsync();
-    }
-
-    await music.setVolumeAsync(Math.max(0, Math.min(1, volume))).catch(() => {});
+    (Object.keys(SOUND_FILES) as SoundName[]).forEach((name) => {
+      if (soundCache[name]) return;
+      const player = createAudioPlayer(SOUND_FILES[name]);
+      player.volume = getSoundVolume(name);
+      soundCache[name] = player;
+    });
   } catch {}
-}
-
-export async function setMusicVolume(volume: number) {
-  if (music) await music.setVolumeAsync(Math.max(0, Math.min(1, volume))).catch(() => {});
 }
 
 export async function playGameSound(name: SoundName, enabled: boolean) {
   if (!enabled) return;
-
   try {
     await setupAudio();
-
     if (!soundCache[name]) {
-      const created = await Audio.Sound.createAsync(SOUND_FILES[name], {
-        volume: name === 'tap' ? 0.18 : 0.45,
-      });
-
-      soundCache[name] = created.sound;
+      const player = createAudioPlayer(SOUND_FILES[name]);
+      player.volume = getSoundVolume(name);
+      soundCache[name] = player;
     }
-
     const sound = soundCache[name];
     if (!sound) return;
-
-    await sound.setPositionAsync(0);
-    await sound.playAsync();
+    try { sound.seekTo(0); } catch {}
+    sound.volume = getSoundVolume(name);
+    sound.play();
   } catch {}
 }
 
-// Screen-to-music theme mapping for immersive gaming experience
-const SCREEN_MUSIC_MAP: Record<string, MusicTheme> = {
-  'index': 'puzzle',
-  'levels': 'puzzle',
-  '(tabs)/index': 'puzzle',
-  '(tabs)/explore': 'puzzle',
-  'game': 'relax',
-  'battle': 'relax',
-  'coins': 'candy',
-  'shop': 'candy',
-  'profile': 'forest',
-  'friends': 'forest',
-  'leaderboard': 'forest',
-  'winner': 'candy',
-};
+export async function playTapSound(enabled = true) { return playGameSound('tap', enabled); }
+export async function playCorrectSound(enabled = true) { return playGameSound('wordFound', enabled); }
+export async function playWrongSound(enabled = true) { return playGameSound('wrong', enabled); }
+export async function playWinSound(enabled = true) { return playGameSound('win', enabled); }
+export async function playLoseSound(enabled = true) { return playGameSound('lose', enabled); }
+export async function playDrawSound(enabled = true) { return playGameSound('draw', enabled); }
+export async function playBattleRequestSound(enabled = true) { return playGameSound('battleRequest', enabled); }
 
-export function getScreenMusicTheme(routeName: string): MusicTheme {
-  return SCREEN_MUSIC_MAP[routeName] || 'relax';
+export async function unloadSounds() {
+  (Object.keys(soundCache) as SoundName[]).forEach((key) => {
+    releasePlayer(soundCache[key]);
+    delete soundCache[key];
+  });
+  audioReady = false;
 }

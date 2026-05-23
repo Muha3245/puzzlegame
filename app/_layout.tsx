@@ -1,11 +1,10 @@
 // app/_layout.tsx
 // Root Stack + background music + global battle notification modal.
 
-import { router, Stack, useRootNavigationState } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { playRelaxMusic, getScreenMusicTheme } from '../lib/audio';
 import {
   acceptBattleRoom,
   BattleRoom,
@@ -13,24 +12,12 @@ import {
   rejectBattleRoom,
   subscribeToIncomingBattles,
 } from '../lib/online';
-import { useAppState } from '../lib/storage';
 import { BattleNotificationModal } from '../components/BattleNotificationModal';
 
 export default function RootLayout() {
-  const { state } = useAppState();
-  const navigationState = useRootNavigationState();
-
   const [pendingBattle, setPendingBattle] = useState<BattleRoom | null>(null);
   const [acceptBusy, setAcceptBusy] = useState(false);
   const shownRoomIds = useRef<Set<string>>(new Set());
-
-  const currentRoute = navigationState?.routes[navigationState.routes.length - 1]?.name || 'index';
-
-  useEffect(() => {
-    const screenTheme = getScreenMusicTheme(currentRoute);
-    const themeToPlay = state.settings.musicTheme === 'relax' ? screenTheme : state.settings.musicTheme;
-    playRelaxMusic(state.settings.music, themeToPlay, state.settings.musicVolume ?? 0.5);
-  }, [state.settings.music, state.settings.musicTheme, state.settings.musicVolume, currentRoute]);
 
   // ── Global incoming battle notifications (fires on every screen) ──────────
   useEffect(() => {
@@ -85,7 +72,10 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" />
+        <Stack.Screen name="home" />
+        <Stack.Screen name="offline" />
         <Stack.Screen name="levels" />
+        <Stack.Screen name="xox" />
         <Stack.Screen name="game" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="friends" />
@@ -93,8 +83,8 @@ export default function RootLayout() {
         <Stack.Screen name="leaderboard" />
         <Stack.Screen name="login" />
         <Stack.Screen name="shop" options={{ presentation: 'transparentModal', animation: 'fade' }} />
-        <Stack.Screen name="coins" options={{ animationEnabled: true }} />
-        <Stack.Screen name="settings" options={{ animationEnabled: true }} />
+        <Stack.Screen name="coins" />
+        <Stack.Screen name="settings" />
         <Stack.Screen name="help" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         <Stack.Screen name="winner" />
       </Stack>

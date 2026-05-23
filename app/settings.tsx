@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React from 'react';
 import {
   Alert,
   ImageBackground,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,74 +13,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HighlightText } from '../components/HighlightText';
 import { Theme, GlassEffects } from '../constants/theme';
-import { MusicTheme, useAppState } from '../lib/storage';
-import { setMusicVolume } from '../lib/audio';
+import { useAppState } from '../lib/storage';
 
 const BG_URI =
   'https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?auto=format&fit=crop&w=1200&q=80';
 
-const MUSIC_OPTIONS: { label: string; value: MusicTheme; icon: keyof typeof Ionicons['glyphMap'] }[] = [
-  { label: 'Relax',  value: 'relax',  icon: 'musical-notes-outline' },
-  { label: 'Candy',  value: 'candy',  icon: 'ice-cream-outline' },
-  { label: 'Forest', value: 'forest', icon: 'leaf-outline' },
-  { label: 'Puzzle', value: 'puzzle', icon: 'grid-outline' },
-];
-
-function VolumeSlider({ volume, onChange }: { volume: number; onChange: (v: number) => void }) {
-  const trackWidthRef = useRef(0);
-  const [trackWidth, setTrackWidth] = useState(0);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => {
-        const { locationX } = e.nativeEvent;
-        const w = trackWidthRef.current;
-        if (w > 0) {
-          const v = Math.max(0, Math.min(1, locationX / w));
-          onChange(v);
-          setMusicVolume(v).catch(() => {});
-        }
-      },
-      onPanResponderMove: (e) => {
-        const { locationX } = e.nativeEvent;
-        const w = trackWidthRef.current;
-        if (w > 0) {
-          const v = Math.max(0, Math.min(1, locationX / w));
-          onChange(v);
-          setMusicVolume(v).catch(() => {});
-        }
-      },
-    }),
-  ).current;
-
-  const thumbPos = trackWidth * volume;
-
-  return (
-    <View
-      style={styles.sliderTrack}
-      onLayout={(e) => {
-        const w = e.nativeEvent.layout.width;
-        trackWidthRef.current = w;
-        setTrackWidth(w);
-      }}
-      {...panResponder.panHandlers}
-    >
-      <View style={[styles.sliderFill, { width: thumbPos }]} />
-      <View style={[styles.sliderThumb, { left: Math.max(0, thumbPos - 10) }]} />
-    </View>
-  );
-}
-
 export default function Settings() {
   const { state, updateSettings } = useAppState();
   const s = state.settings;
-  const volume = s.musicVolume ?? 0.5;
-
-  const handleVolumeChange = (v: number) => {
-    updateSettings({ musicVolume: v });
-  };
 
   return (
     <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
@@ -89,7 +28,6 @@ export default function Settings() {
       <View style={styles.orb1} />
       <View style={styles.orb2} />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color="#fff" />
@@ -102,25 +40,15 @@ export default function Settings() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Audio Settings */}
-          <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            🔊 AUDIO
-          </HighlightText>
+          <SectionHeader icon="volume-high-outline" label="AUDIO" />
 
           <View style={{ gap: 6 }}>
             <Row
               icon="musical-note-outline"
               iconColor={Theme.primary}
               label="Sound Effects"
-              sub="Tap and word-found chimes"
+              sub="Tap, win, lose and battle chimes"
               right={<Toggle on={s.sound} onChange={(v) => updateSettings({ sound: v })} />}
-            />
-            <Row
-              icon="headset-outline"
-              iconColor="#B36AE2"
-              label="Background Music"
-              sub="Music across full app"
-              right={<Toggle on={s.music} onChange={(v) => updateSettings({ music: v })} />}
             />
             <Row
               icon="phone-portrait-outline"
@@ -131,56 +59,7 @@ export default function Settings() {
             />
           </View>
 
-          {/* Volume slider */}
-          <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            🎚 MUSIC VOLUME
-          </HighlightText>
-
-          <View style={styles.volumeCard}>
-            <View style={styles.volumeRow}>
-              <Ionicons name="volume-low-outline" size={18} color={Theme.textDim} />
-              <VolumeSlider volume={volume} onChange={handleVolumeChange} />
-              <Ionicons name="volume-high-outline" size={18} color={Theme.textDim} />
-            </View>
-            <Text style={styles.volumePct}>{Math.round(volume * 100)}%</Text>
-          </View>
-
-          {/* Music Theme Selection */}
-          <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            🎵 MUSIC THEME
-          </HighlightText>
-
-          <View style={styles.musicGrid}>
-            {MUSIC_OPTIONS.map((item) => {
-              const active = s.musicTheme === item.value;
-              return (
-                <Pressable
-                  key={item.value}
-                  onPress={() => updateSettings({ musicTheme: item.value })}
-                  style={[styles.musicCard, active && styles.musicCardActive]}
-                >
-                  <Ionicons
-                    name={item.icon}
-                    size={24}
-                    color={active ? Theme.primary : Theme.textDim}
-                    style={{ marginBottom: 4 }}
-                  />
-                  <HighlightText
-                    size="small"
-                    color={active ? '#fff' : Theme.textDim}
-                    style={styles.musicLabel}
-                  >
-                    {item.label}
-                  </HighlightText>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Notifications */}
-          <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            🔔 NOTIFICATIONS
-          </HighlightText>
+          <SectionHeader icon="notifications-outline" label="NOTIFICATIONS" />
 
           <Row
             icon="alarm-outline"
@@ -190,10 +69,7 @@ export default function Settings() {
             right={<Toggle on={s.notify} onChange={(v) => updateSettings({ notify: v })} />}
           />
 
-          {/* App Information */}
-          <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>
-            ℹ️ APP INFORMATION
-          </HighlightText>
+          <SectionHeader icon="information-circle-outline" label="APP INFORMATION" />
 
           <View style={{ gap: 6 }}>
             <Row
@@ -233,6 +109,15 @@ export default function Settings() {
         </ScrollView>
       </SafeAreaView>
     </ImageBackground>
+  );
+}
+
+function SectionHeader({ icon, label }: { icon: keyof typeof Ionicons['glyphMap']; label: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Ionicons name={icon} size={14} color={Theme.textDim} />
+      <HighlightText size="small" color={Theme.textDim} style={styles.sectionTitle}>{label}</HighlightText>
+    </View>
   );
 }
 
@@ -307,7 +192,15 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: { paddingHorizontal: 16, paddingVertical: 8 },
-  sectionTitle: { letterSpacing: 1.2, marginTop: 16, marginBottom: 6 },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  sectionTitle: { letterSpacing: 1.2 },
 
   row: {
     flexDirection: 'row',
@@ -331,70 +224,11 @@ const styles = StyleSheet.create({
   toggle: { width: 44, height: 26, borderRadius: 13, position: 'relative' },
   toggleKnob: { position: 'absolute', top: 3, width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
 
-  volumeCard: {
-    borderRadius: 14,
-    padding: 14,
-    ...GlassEffects.light,
-    gap: 8,
-  },
-  volumeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  sliderTrack: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  sliderFill: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Theme.primary,
-  },
-  sliderThumb: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    top: -7,
-    shadowColor: Theme.primary,
-    shadowOpacity: 0.5,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  volumePct: {
-    textAlign: 'center',
-    color: Theme.textDim,
-    fontWeight: '800',
-    fontSize: 12,
-  },
-
-  musicGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  musicCard: {
-    width: '48%',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    ...GlassEffects.light,
-  },
-  musicCardActive: {
-    backgroundColor: 'rgba(255,120,0,0.20)',
-    borderColor: Theme.primary,
-    borderWidth: 1.5,
-  },
-  musicLabel: { marginBottom: 0 },
-
   version: {
     textAlign: 'center',
     color: Theme.textMute,
     fontSize: 11,
     fontWeight: '700',
-    marginTop: 18,
+    marginTop: 24,
   },
 });

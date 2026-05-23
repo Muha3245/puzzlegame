@@ -1,7 +1,32 @@
 // lib/online.ts
 // Supabase helpers for auth, profiles, friends, leaderboard, progress, and live battle rooms.
 
-import { supabase } from './supabase';
+import { supabase } from "./supabase";
+
+const ONLINE_LOG_THROTTLE = new Map<string, number>();
+
+function logOnline(step: string, data?: any) {
+  try {
+    const roomId = data?.roomId || data?.id || "";
+    const key = `${step}:${roomId}`;
+    const now = Date.now();
+    const last = ONLINE_LOG_THROTTLE.get(key) || 0;
+
+    // Prevent terminal flood from polling logs. Important errors still print below.
+    if (
+      (step.includes("players") ||
+        step.includes("status in_progress") ||
+        step.includes("start") ||
+        step.includes("getBattleRooms")) &&
+      now - last < 5000
+    ) {
+      return;
+    }
+
+    ONLINE_LOG_THROTTLE.set(key, now);
+    console.log(`[BATTLE][ONLINE] ${step}`, data ?? "");
+  } catch {}
+}
 
 export type PublicUser = {
   uid: string;
@@ -21,7 +46,7 @@ export type FriendRequest = {
   toUid: string;
   fromName: string;
   toName: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: "pending" | "accepted" | "rejected";
   createdAt?: any;
 };
 
@@ -31,7 +56,7 @@ export type BattleRoom = {
   player2Id: string;
   player1Name: string;
   player2Name: string;
-  status: 'pending' | 'accepted' | 'in_progress' | 'completed';
+  status: "pending" | "accepted" | "in_progress" | "completed";
   categoryId: string;
   categoryKey: string;
   categoryTitle: string;
@@ -61,7 +86,7 @@ export type BattlePlayerState = {
 function mapUser(row: any): PublicUser {
   return {
     uid: row.uid,
-    displayName: row.display_name || row.email?.split('@')[0] || 'Player',
+    displayName: row.display_name || row.email?.split("@")[0] || "Player",
     email: row.email,
     photoURL: row.photo_url,
     coins: row.coins ?? 0,
@@ -77,8 +102,8 @@ function mapBattleRoom(row: any): BattleRoom {
     id: row.id,
     player1Id: row.player1_id,
     player2Id: row.player2_id,
-    player1Name: row.player1_name || 'Player 1',
-    player2Name: row.player2_name || 'Player 2',
+    player1Name: row.player1_name || "Player 1",
+    player2Name: row.player2_name || "Player 2",
     status: row.status,
     categoryId: row.category_id,
     categoryKey: row.category_key,
@@ -95,7 +120,7 @@ function mapBattlePlayer(row: any): BattlePlayerState {
   return {
     roomId: row.room_id,
     userId: row.user_id,
-    displayName: row.display_name || 'Player',
+    displayName: row.display_name || "Player",
     score: row.score ?? 0,
     wordsFound: row.words_found ?? 0,
     totalWords: row.total_words ?? 0,
@@ -119,9 +144,10 @@ export async function ensureUserProfile(
   email: string | null | undefined,
   displayName?: string,
 ) {
-  const safeName = displayName?.trim() || email?.split('@')[0] || `Player-${uid.slice(0, 5)}`;
+  const safeName =
+    displayName?.trim() || email?.split("@")[0] || `Player-${uid.slice(0, 5)}`;
 
-  const { error } = await supabase.from('users').upsert(
+  const { error } = await supabase.from("users").upsert(
     {
       uid,
       display_name: safeName,
@@ -129,14 +155,18 @@ export async function ensureUserProfile(
       photo_url: null,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'uid', ignoreDuplicates: false },
+    { onConflict: "uid", ignoreDuplicates: false },
   );
 
   if (error) throw error;
   return safeName;
 }
 
-export async function registerWithEmail(name: string, email: string, password: string) {
+export async function registerWithEmail(
+  name: string,
+  email: string,
+  password: string,
+) {
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
     password,
@@ -146,10 +176,12 @@ export async function registerWithEmail(name: string, email: string, password: s
   if (error) throw new Error(error.message);
 
   if (data.user && !data.session) {
-    throw new Error('Confirm your email first, or turn off email confirmation in Supabase Auth settings for testing.');
+    throw new Error(
+      "Confirm your email first, or turn off email confirmation in Supabase Auth settings for testing.",
+    );
   }
 
-  if (!data.user) throw new Error('Sign-up returned no user.');
+  if (!data.user) throw new Error("Sign-up returned no user.");
   await ensureUserProfile(data.user.id, data.user.email, name.trim());
   return data.user;
 }
@@ -161,17 +193,25 @@ export async function loginWithEmail(email: string, password: string) {
   });
 
   if (error) throw new Error(error.message);
-  if (!data.user) throw new Error('Login failed. Please try again.');
+  if (!data.user) throw new Error("Login failed. Please try again.");
 
-  await ensureUserProfile(data.user.id, data.user.email, data.user.user_metadata?.display_name);
+  await ensureUserProfile(
+    data.user.id,
+    data.user.email,
+    data.user.user_metadata?.display_name,
+  );
   return data.user;
 }
 
 export async function loginAsGuest() {
   const { data, error } = await supabase.auth.signInAnonymously();
   if (error) throw error;
-  if (!data.user) throw new Error('Guest login failed.');
-  await ensureUserProfile(data.user.id, null, `Guest-${data.user.id.slice(0, 5)}`);
+  if (!data.user) throw new Error("Guest login failed.");
+  await ensureUserProfile(
+    data.user.id,
+    null,
+    `Guest-${data.user.id.slice(0, 5)}`,
+  );
   return data.user;
 }
 
@@ -185,7 +225,11 @@ export async function getMyProfile(): Promise<PublicUser | null> {
   const uid = await getCurrentUserId();
   if (!uid) return null;
 
-  const { data, error } = await supabase.from('users').select('*').eq('uid', uid).maybeSingle();
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("uid", uid)
+    .maybeSingle();
   if (error) throw error;
   return data ? mapUser(data) : null;
 }
@@ -211,15 +255,15 @@ export async function completeOnlineLevel({
   const progressKey = `${categoryKey}-${difficulty}-level-${level}`;
 
   const { data: existing } = await supabase
-    .from('user_progress')
-    .select('completed')
-    .eq('user_id', uid)
-    .eq('progress_key', progressKey)
+    .from("user_progress")
+    .select("completed")
+    .eq("user_id", uid)
+    .eq("progress_key", progressKey)
     .maybeSingle();
 
   const wasCompleted = existing?.completed === true;
 
-  await supabase.from('user_progress').upsert(
+  await supabase.from("user_progress").upsert(
     {
       user_id: uid,
       progress_key: progressKey,
@@ -232,26 +276,27 @@ export async function completeOnlineLevel({
       completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'user_id,progress_key' },
+    { onConflict: "user_id,progress_key" },
   );
 
   const scoreGain = foundWords * 10 + rewardCoins;
   const { data: profile } = await supabase
-    .from('users')
-    .select('coins, total_score, levels_completed')
-    .eq('uid', uid)
+    .from("users")
+    .select("coins, total_score, levels_completed")
+    .eq("uid", uid)
     .maybeSingle();
 
   if (profile) {
     await supabase
-      .from('users')
+      .from("users")
       .update({
         coins: (profile.coins ?? 0) + rewardCoins,
         total_score: (profile.total_score ?? 0) + scoreGain,
-        levels_completed: (profile.levels_completed ?? 0) + (wasCompleted ? 0 : 1),
+        levels_completed:
+          (profile.levels_completed ?? 0) + (wasCompleted ? 0 : 1),
         updated_at: new Date().toISOString(),
       })
-      .eq('uid', uid);
+      .eq("uid", uid);
   }
 }
 
@@ -259,9 +304,11 @@ export async function completeOnlineLevel({
 
 export async function getGlobalLeaderboard(count = 50) {
   const { data, error } = await supabase
-    .from('users')
-    .select('uid, display_name, email, photo_url, coins, total_score, levels_completed')
-    .order('total_score', { ascending: false })
+    .from("users")
+    .select(
+      "uid, display_name, email, photo_url, coins, total_score, levels_completed",
+    )
+    .order("total_score", { ascending: false })
     .limit(count);
 
   if (error) throw error;
@@ -281,9 +328,11 @@ export async function searchPlayers(searchText: string): Promise<PublicUser[]> {
   const uid = await getCurrentUserId();
 
   const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .or(`display_name.ilike.%${text}%,email.ilike.%${text}%,uid.ilike.%${text}%`)
+    .from("users")
+    .select("*")
+    .or(
+      `display_name.ilike.%${text}%,email.ilike.%${text}%,uid.ilike.%${text}%`,
+    )
     .limit(30);
 
   if (error) throw error;
@@ -294,24 +343,24 @@ export async function searchPlayers(searchText: string): Promise<PublicUser[]> {
 
 export async function sendFriendRequest(toUser: PublicUser) {
   const uid = await getCurrentUserId();
-  if (!uid) throw new Error('Please login first.');
+  if (!uid) throw new Error("Please login first.");
 
   const myProfile = await getMyProfile();
-  if (!myProfile) throw new Error('Profile not found.');
+  if (!myProfile) throw new Error("Profile not found.");
 
   const requestId = `${uid}_${toUser.uid}`;
-  const { error } = await supabase.from('friend_requests').upsert(
+  const { error } = await supabase.from("friend_requests").upsert(
     {
       id: requestId,
       from_uid: uid,
       to_uid: toUser.uid,
       from_name: myProfile.displayName,
       to_name: toUser.displayName,
-      status: 'pending',
+      status: "pending",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'id' },
+    { onConflict: "id" },
   );
 
   if (error) throw error;
@@ -323,11 +372,11 @@ export async function getIncomingFriendRequests(): Promise<FriendRequest[]> {
   if (!uid) return [];
 
   const { data, error } = await supabase
-    .from('friend_requests')
-    .select('*')
-    .eq('to_uid', uid)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false });
+    .from("friend_requests")
+    .select("*")
+    .eq("to_uid", uid)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
 
@@ -346,49 +395,60 @@ export async function acceptFriendRequest(request: FriendRequest) {
   const now = new Date().toISOString();
 
   const { error: updateError } = await supabase
-    .from('friend_requests')
-    .update({ status: 'accepted', updated_at: now })
-    .eq('id', request.id);
+    .from("friend_requests")
+    .update({ status: "accepted", updated_at: now })
+    .eq("id", request.id);
   if (updateError) throw updateError;
 
-  const { error: insertOneError } = await supabase.from('friends').upsert(
-    { user_id: request.fromUid, friend_id: request.toUid, friend_name: request.toName },
-    { onConflict: 'user_id,friend_id' },
-  );
+  const { error: insertOneError } = await supabase
+    .from("friends")
+    .upsert(
+      {
+        user_id: request.fromUid,
+        friend_id: request.toUid,
+        friend_name: request.toName,
+      },
+      { onConflict: "user_id,friend_id" },
+    );
   if (insertOneError) throw insertOneError;
 
-  const { error: insertTwoError } = await supabase.from('friends').upsert(
-    { user_id: request.toUid, friend_id: request.fromUid, friend_name: request.fromName },
-    { onConflict: 'user_id,friend_id' },
-  );
+  const { error: insertTwoError } = await supabase
+    .from("friends")
+    .upsert(
+      {
+        user_id: request.toUid,
+        friend_id: request.fromUid,
+        friend_name: request.fromName,
+      },
+      { onConflict: "user_id,friend_id" },
+    );
   if (insertTwoError) throw insertTwoError;
 }
 
 export async function rejectFriendRequest(request: FriendRequest) {
   const { error } = await supabase
-    .from('friend_requests')
-    .update({ status: 'rejected', updated_at: new Date().toISOString() })
-    .eq('id', request.id);
+    .from("friend_requests")
+    .update({ status: "rejected", updated_at: new Date().toISOString() })
+    .eq("id", request.id);
   if (error) throw error;
 }
-
 
 export async function getMyFriends(): Promise<PublicUser[]> {
   const uid = await getCurrentUserId();
   if (!uid) return [];
 
   const { data, error } = await supabase
-    .from('friends')
-    .select('friend_id, friend_name, created_at')
-    .eq('user_id', uid)
-    .order('created_at', { ascending: false });
+    .from("friends")
+    .select("friend_id, friend_name, created_at")
+    .eq("user_id", uid)
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
 
   return (data ?? []).map((row) => ({
     id: row.friend_id,
     uid: row.friend_id,
-    displayName: row.friend_name || 'Friend',
+    displayName: row.friend_name || "Friend",
     email: null,
     photoURL: null,
     coins: 0,
@@ -402,8 +462,16 @@ export async function removeFriend(friendUid: string) {
   const uid = await getCurrentUserId();
   if (!uid) return;
 
-  await supabase.from('friends').delete().eq('user_id', uid).eq('friend_id', friendUid);
-  await supabase.from('friends').delete().eq('user_id', friendUid).eq('friend_id', uid);
+  await supabase
+    .from("friends")
+    .delete()
+    .eq("user_id", uid)
+    .eq("friend_id", friendUid);
+  await supabase
+    .from("friends")
+    .delete()
+    .eq("user_id", friendUid)
+    .eq("friend_id", uid);
 }
 
 // ─── Live Battle Rooms ────────────────────────────────────────────────────────
@@ -424,28 +492,43 @@ export async function createBattleRoom({
   level: number;
 }) {
   const me = await getMyProfile();
-  if (!me) throw new Error('Please login first.');
+  if (!me) throw new Error("Please login first.");
+
+  const safeDifficulty = String(difficulty || "easy")
+    .toLowerCase()
+    .trim();
+  const payload = {
+    player1_id: me.uid,
+    player2_id: friend.uid,
+    player1_name: me.displayName,
+    player2_name: friend.displayName,
+    status: "pending",
+    category_id: categoryId,
+    category_key: categoryKey || categoryId,
+    category_title: categoryTitle || categoryKey || categoryId,
+    difficulty: ["easy", "medium", "hard", "pro"].includes(safeDifficulty)
+      ? safeDifficulty
+      : "easy",
+    level: Math.min(Math.max(Number(level || 1) || 1, 1), 8),
+    updated_at: new Date().toISOString(),
+  };
+
+  logOnline("createBattleRoom insert", payload);
 
   const { data, error } = await supabase
-    .from('battle_rooms')
-    .insert({
-      player1_id: me.uid,
-      player2_id: friend.uid,
-      player1_name: me.displayName,
-      player2_name: friend.displayName,
-      status: 'pending',
-      category_id: categoryId,
-      category_key: categoryKey,
-      category_title: categoryTitle,
-      difficulty,
-      level,
-      updated_at: new Date().toISOString(),
-    })
-    .select('*')
+    .from("battle_rooms")
+    .insert(payload)
+    .select("*")
     .single();
 
-  if (error) throw error;
-  return mapBattleRoom(data);
+  if (error) {
+    logOnline("createBattleRoom error", error);
+    throw error;
+  }
+
+  const room = mapBattleRoom(data);
+  logOnline("createBattleRoom success", room);
+  return room;
 }
 
 export async function getBattleRooms(): Promise<{
@@ -458,112 +541,209 @@ export async function getBattleRooms(): Promise<{
   if (!uid) return { incoming: [], outgoing: [], active: [], completed: [] };
 
   const { data, error } = await supabase
-    .from('battle_rooms')
-    .select('*')
+    .from("battle_rooms")
+    .select("*")
     .or(`player1_id.eq.${uid},player2_id.eq.${uid}`)
-    .order('created_at', { ascending: false });
+    .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    logOnline("getBattleRooms error", error);
+    throw error;
+  }
   const rooms = (data ?? []).map(mapBattleRoom);
+  logOnline("getBattleRooms", { uid, count: rooms.length });
 
   return {
-    incoming:  rooms.filter((r) => r.status === 'pending'  && r.player2Id === uid),
-    outgoing:  rooms.filter((r) => r.status === 'pending'  && r.player1Id === uid),
-    active:    rooms.filter((r) => r.status === 'accepted' || r.status === 'in_progress'),
-    completed: rooms.filter((r) => r.status === 'completed'),
+    incoming: rooms.filter(
+      (r) => r.status === "pending" && r.player2Id === uid,
+    ),
+    outgoing: rooms.filter(
+      (r) => r.status === "pending" && r.player1Id === uid,
+    ),
+    active: rooms.filter(
+      (r) => r.status === "accepted" || r.status === "in_progress",
+    ),
+    completed: rooms.filter((r) => r.status === "completed"),
   };
 }
 
-export async function getBattleRoom(roomId: string): Promise<BattleRoom | null> {
+export async function getBattleRoom(
+  roomId: string,
+): Promise<BattleRoom | null> {
   const { data, error } = await supabase
-    .from('battle_rooms')
-    .select('*')
-    .eq('id', roomId)
+    .from("battle_rooms")
+    .select("*")
+    .eq("id", roomId)
     .maybeSingle();
   if (error) throw error;
   return data ? mapBattleRoom(data) : null;
 }
 
-export async function acceptBattleRoom(room: BattleRoom) {
-  const { error } = await supabase
-    .from('battle_rooms')
-    .update({ status: 'accepted', updated_at: new Date().toISOString() })
-    .eq('id', room.id);
-  if (error) throw error;
+export async function acceptBattleRoom(room: BattleRoom): Promise<BattleRoom> {
+  logOnline("acceptBattleRoom start", { id: room.id, status: room.status });
+
+  const { data, error } = await supabase
+    .from("battle_rooms")
+    .update({ status: "accepted", updated_at: new Date().toISOString() })
+    .eq("id", room.id)
+    .in("status", ["pending", "accepted", "in_progress"])
+    .select("*")
+    .single();
+
+  if (error) {
+    logOnline("acceptBattleRoom update error", error);
+    throw error;
+  }
+
   await ensureBattlePlayerRows(room.id);
+
+  const fresh = await getBattleRoom(room.id);
+  const accepted = fresh ?? mapBattleRoom(data);
+  logOnline("acceptBattleRoom success", accepted);
+  return accepted;
 }
 
 export async function rejectBattleRoom(room: BattleRoom) {
   // Delete instead of setting status='rejected' — the DB check constraint only allows
   // pending/accepted/in_progress/completed. Deletion also cleans up cleanly and fires
   // subscribeToMyBattleList so both players' lists refresh automatically.
-  await supabase.from('battle_room_players').delete().eq('room_id', room.id);
-  const { error } = await supabase.from('battle_rooms').delete().eq('id', room.id);
+  await supabase.from("battle_room_players").delete().eq("room_id", room.id);
+  const { error } = await supabase
+    .from("battle_rooms")
+    .delete()
+    .eq("id", room.id);
   if (error) throw error;
 }
 
 export async function ensureBattlePlayerRows(roomId: string) {
   const uid = await getCurrentUserId();
-  if (!uid) throw new Error('Please login first.');
+  if (!uid) throw new Error("Please login first.");
 
   const room = await getBattleRoom(roomId);
-  if (!room) throw new Error('Battle room not found.');
+  if (!room) throw new Error("Battle room not found.");
 
   const isPlayer1 = uid === room.player1Id;
   const isPlayer2 = uid === room.player2Id;
-  if (!isPlayer1 && !isPlayer2) throw new Error('You are not part of this battle room.');
+  if (!isPlayer1 && !isPlayer2)
+    throw new Error("You are not part of this battle room.");
 
   const now = new Date().toISOString();
   const displayName = isPlayer1 ? room.player1Name : room.player2Name;
+  logOnline("ensureBattlePlayerRows start", {
+    roomId,
+    uid,
+    isPlayer1,
+    isPlayer2,
+    status: room.status,
+  });
+
+  // Important for rematch: never revive or keep touching an old completed room.
+  // The game screen can briefly keep old polling alive during router.replace().
+  if (room.status === "completed") {
+    logOnline("ensureBattlePlayerRows skip completed room", { roomId });
+    return;
+  }
 
   const { error } = await supabase
-    .from('battle_room_players')
+    .from("battle_room_players")
     .upsert(
-      { room_id: room.id, user_id: uid, display_name: displayName, is_ready: true, has_quit: false, updated_at: now },
-      { onConflict: 'room_id,user_id' },
+      {
+        room_id: room.id,
+        user_id: uid,
+        display_name: displayName,
+        is_ready: true,
+        has_quit: false,
+        updated_at: now,
+      },
+      { onConflict: "room_id,user_id" },
     );
-  if (error) throw error;
+  if (error) {
+    logOnline("ensureBattlePlayerRows upsert error", error);
+    throw error;
+  }
 
-  await supabase
-    .from('battle_rooms')
-    .update({ status: 'in_progress', updated_at: now })
-    .eq('id', room.id)
-    .in('status', ['accepted', 'in_progress']);
+  const players = await getBattlePlayers(room.id).catch((e) => {
+    logOnline("ensureBattlePlayerRows get players error", e);
+    return [];
+  });
+
+  logOnline("ensureBattlePlayerRows players", {
+    roomId,
+    count: players.length,
+    players: players.map((p) => ({
+      userId: p.userId,
+      ready: p.isReady,
+      name: p.displayName,
+    })),
+  });
+
+  // Keep pending rooms visible to the invited opponent until they accept.
+  // Only switch to in_progress after both player rows exist.
+  if (players.length >= 2) {
+    const { data: updatedRows, error: updateError } = await supabase
+      .from("battle_rooms")
+      .update({ status: "in_progress", updated_at: now })
+      .eq("id", room.id)
+      .in("status", ["accepted", "in_progress"])
+      .select("id,status");
+
+    if (updateError) {
+      logOnline("ensureBattlePlayerRows status update error", updateError);
+      throw updateError;
+    }
+
+    if ((updatedRows ?? []).length > 0) {
+      logOnline("ensureBattlePlayerRows status in_progress", { roomId });
+    }
+  }
 }
 
-export async function getBattlePlayers(roomId: string): Promise<BattlePlayerState[]> {
+export async function getBattlePlayers(
+  roomId: string,
+): Promise<BattlePlayerState[]> {
   const { data, error } = await supabase
-    .from('battle_room_players')
-    .select('*')
-    .eq('room_id', roomId)
-    .order('created_at', { ascending: true });
+    .from("battle_room_players")
+    .select("*")
+    .eq("room_id", roomId)
+    .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(mapBattlePlayer);
 }
 
 export async function updateBattleProgress({
-  roomId, score, wordsFound, totalWords, elapsedSeconds, lastWord, isFinished,
+  roomId,
+  score,
+  wordsFound,
+  totalWords,
+  elapsedSeconds,
+  lastWord,
+  isFinished,
 }: {
-  roomId: string; score: number; wordsFound: number; totalWords: number;
-  elapsedSeconds: number; lastWord?: string; isFinished?: boolean;
+  roomId: string;
+  score: number;
+  wordsFound: number;
+  totalWords: number;
+  elapsedSeconds: number;
+  lastWord?: string;
+  isFinished?: boolean;
 }) {
   const uid = await getCurrentUserId();
   if (!uid) return;
 
   const { error } = await supabase
-    .from('battle_room_players')
+    .from("battle_room_players")
     .update({
       score,
-      words_found:     wordsFound,
-      total_words:     totalWords,
+      words_found: wordsFound,
+      total_words: totalWords,
       elapsed_seconds: elapsedSeconds,
-      last_word:       lastWord ?? null,
-      is_ready:        true,
-      is_finished:     isFinished === true,
-      updated_at:      new Date().toISOString(),
+      last_word: lastWord ?? null,
+      is_ready: true,
+      is_finished: isFinished === true,
+      updated_at: new Date().toISOString(),
     })
-    .eq('room_id', roomId)
-    .eq('user_id', uid);
+    .eq("room_id", roomId)
+    .eq("user_id", uid);
 
   if (error) throw error;
   if (isFinished) await finalizeBattleRoomIfReady(roomId);
@@ -576,30 +756,37 @@ export async function finalizeBattleRoomIfReady(roomId: string) {
   const [a, b] = players;
   let winnerId: string | null = null;
 
-  if      (a.wordsFound > b.wordsFound)         winnerId = a.userId;
-  else if (b.wordsFound > a.wordsFound)         winnerId = b.userId;
-  else if (a.score > b.score)                   winnerId = a.userId;
-  else if (b.score > a.score)                   winnerId = b.userId;
+  if (a.wordsFound > b.wordsFound) winnerId = a.userId;
+  else if (b.wordsFound > a.wordsFound) winnerId = b.userId;
+  else if (a.score > b.score) winnerId = a.userId;
+  else if (b.score > a.score) winnerId = b.userId;
   else if (a.elapsedSeconds < b.elapsedSeconds) winnerId = a.userId;
   else if (b.elapsedSeconds < a.elapsedSeconds) winnerId = b.userId;
 
   const { error } = await supabase
-    .from('battle_rooms')
-    .update({ status: 'completed', winner_id: winnerId, updated_at: new Date().toISOString() })
-    .eq('id', roomId);
+    .from("battle_rooms")
+    .update({
+      status: "completed",
+      winner_id: winnerId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", roomId);
   if (error) throw error;
   return winnerId;
 }
 
-export async function finishBattleRoomNow(roomId: string, winnerId: string | null) {
+export async function finishBattleRoomNow(
+  roomId: string,
+  winnerId: string | null,
+) {
   const { error } = await supabase
-    .from('battle_rooms')
+    .from("battle_rooms")
     .update({
-      status: 'completed',
+      status: "completed",
       winner_id: winnerId,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', roomId);
+    .eq("id", roomId);
 
   if (error) throw error;
   return winnerId;
@@ -611,25 +798,26 @@ export async function quitBattleRoom(roomId: string) {
 
   const now = new Date().toISOString();
   await supabase
-    .from('battle_room_players')
+    .from("battle_room_players")
     .update({ has_quit: true, updated_at: now })
-    .eq('room_id', roomId)
-    .eq('user_id', uid);
+    .eq("room_id", roomId)
+    .eq("user_id", uid);
 
   const players = await getBattlePlayers(roomId);
-  const bothQuit = players.length >= 2 && players.every((p: any) => p.has_quit || p.hasQuit);
+  const bothQuit =
+    players.length >= 2 && players.every((p: any) => p.has_quit || p.hasQuit);
   if (bothQuit) {
-    await supabase.from('battle_room_players').delete().eq('room_id', roomId);
-    await supabase.from('battle_rooms').delete().eq('id', roomId);
+    await supabase.from("battle_room_players").delete().eq("room_id", roomId);
+    await supabase.from("battle_rooms").delete().eq("id", roomId);
   }
 }
 
 export async function getBattleCounts() {
   const rooms = await getBattleRooms();
   return {
-    incoming:  rooms.incoming.length,
-    outgoing:  rooms.outgoing.length,
-    active:    rooms.active.length,
+    incoming: rooms.incoming.length,
+    outgoing: rooms.outgoing.length,
+    active: rooms.active.length,
     completed: rooms.completed.length,
   };
 }
@@ -639,10 +827,30 @@ export async function getBattleCounts() {
 export function subscribeToBattleRoom(roomId: string, onChange: () => void) {
   const channel = supabase
     .channel(`battle-room-${roomId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'battle_rooms',        filter: `id=eq.${roomId}` }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'battle_room_players', filter: `room_id=eq.${roomId}` }, onChange)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "battle_rooms",
+        filter: `id=eq.${roomId}`,
+      },
+      onChange,
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "battle_room_players",
+        filter: `room_id=eq.${roomId}`,
+      },
+      onChange,
+    )
     .subscribe();
-  return () => { supabase.removeChannel(channel); };
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 export function subscribeToMyBattleList(userId: string, onChange: () => void) {
@@ -651,9 +859,15 @@ export function subscribeToMyBattleList(userId: string, onChange: () => void) {
   // multiple times with the same userId.
   const channel = supabase
     .channel(`battle-list-${userId}-${Date.now()}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'battle_rooms' }, onChange)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "battle_rooms" },
+      onChange,
+    )
     .subscribe();
-  return () => { supabase.removeChannel(channel); };
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // Fires when a new battle room targets this user as player2.
@@ -662,18 +876,24 @@ export function subscribeToMyBattleList(userId: string, onChange: () => void) {
 // configurations — the event fires but is silently dropped before delivery.
 // Instead we subscribe to ALL inserts (RLS still limits which rows are visible)
 // and check player2_id client-side, which is 100% reliable.
-export function subscribeToIncomingBattles(userId: string, onNewRoom: (room: BattleRoom) => void) {
+export function subscribeToIncomingBattles(
+  userId: string,
+  onNewRoom: (room: BattleRoom) => void,
+) {
   const channel = supabase
     .channel(`battle-incoming-${userId}`)
     .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'battle_rooms' },
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "battle_rooms" },
       (payload: any) => {
-        if (payload.new?.player2_id === userId) onNewRoom(mapBattleRoom(payload.new));
+        if (payload.new?.player2_id === userId)
+          onNewRoom(mapBattleRoom(payload.new));
       },
     )
     .subscribe();
-  return () => { supabase.removeChannel(channel); };
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // ─── Battle Broadcast (gameplay score sync) ───────────────────────────────────
@@ -690,7 +910,16 @@ export type BattleBroadcastPayload = {
   isFinished?: boolean;
   gameOver?: boolean;
   winnerId?: string | null;
-  reason?: 'completed' | 'timeout' | 'quit';
+  reason?: "completed" | "timeout" | "quit";
+};
+
+export type BattleChatMessage = {
+  id: string;
+  roomId: string;
+  userId: string;
+  displayName: string;
+  text: string;
+  createdAt: number;
 };
 
 export function subscribeToBattleScore(
@@ -701,14 +930,46 @@ export function subscribeToBattleScore(
     .channel(`battle-score-${roomId}`, {
       config: { broadcast: { self: false } },
     })
-    .on('broadcast', { event: 'score' }, ({ payload }: { payload: BattleBroadcastPayload }) => {
-      onOpponentUpdate(payload);
-    })
+    .on(
+      "broadcast",
+      { event: "score" },
+      ({ payload }: { payload: BattleBroadcastPayload }) => {
+        onOpponentUpdate(payload);
+      },
+    )
     .subscribe();
 
   return {
     send: (data: BattleBroadcastPayload) =>
-      channel.send({ type: 'broadcast', event: 'score', payload: data }),
+      channel.send({ type: "broadcast", event: "score", payload: data }),
     cleanup: () => supabase.removeChannel(channel),
   };
 }
+
+// ─── Battle Chat Broadcast (ephemeral, NOT stored in DB) ─────────────────────
+// Uses Supabase Realtime Broadcast only. Messages disappear when the screen
+// reloads/unmounts and are never inserted into any table.
+export function subscribeToBattleChat(
+  roomId: string,
+  onMessage: (message: BattleChatMessage) => void,
+): { send: (message: BattleChatMessage) => void; cleanup: () => void } {
+  const channel = supabase
+    .channel(`battle-chat-${roomId}`, {
+      config: { broadcast: { self: false } },
+    })
+    .on(
+      "broadcast",
+      { event: "chat" },
+      ({ payload }: { payload: BattleChatMessage }) => {
+        onMessage(payload);
+      },
+    )
+    .subscribe();
+
+  return {
+    send: (message: BattleChatMessage) =>
+      channel.send({ type: "broadcast", event: "chat", payload: message }),
+    cleanup: () => supabase.removeChannel(channel),
+  };
+}
+
