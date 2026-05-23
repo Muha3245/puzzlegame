@@ -1,0 +1,519 @@
+// app/xox-battle.tsx
+// XOX Online lobby — challenge friends to real-time Tic Tac Toe
+
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { AnimatedPressable } from '../components/AnimatedPressable';
+import { ScreenShell } from '../components/ScreenShell';
+import {
+  acceptXoxRoom,
+  createXoxRoom,
+  getCurrentUserId,
+  getMyFriends,
+  getXoxRooms,
+  PublicUser,
+  rejectXoxRoom,
+  subscribeToMyXoxList,
+  XoxRoom,
+} from '../lib/online';
+
+const BOARD_SIZES: { size: 3 | 4 | 5; label: string; sub: string; color: string }[] = [
+  { size: 3, label: '3 × 3', sub: 'Classic',  color: '#4CC38A' },
+  { size: 4, label: '4 × 4', sub: 'Extended', color: '#FF7A00' },
+  { size: 5, label: '5 × 5', sub: 'Big',      color: '#8E6BFF' },
+];
+
+type RoomBuckets = {
+  incoming:  XoxRoom[];
+  outgoing:  XoxRoom[];
+  active:    XoxRoom[];
+  completed: XoxRoom[];
+};
+
+const emptyBuckets: RoomBuckets = { incoming: [], outgoing: [], active: [], completed: [] };
+
+function initials(name: string) {
+  return (name || 'P').trim().charAt(0).toUpperCase();
+}
+
+export default function XoxBattleScreen() {
+  const [uid,           setUid]           = useState<string | null>(null);
+  const [friends,       setFriends]       = useState<PublicUser[]>([]);
+  const [rooms,         setRooms]         = useState<RoomBuckets>(emptyBuckets);
+  const [boardSize,     setBoardSize]     = useState<3 | 4 | 5>(3);
+  const [loading,       setLoading]       = useState(true);
+  const [busyId,        setBusyId]        = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const current = await getCurrentUserId();
+      setUid(current);
+      const [friendRows, roomRows] = await Promise.all([getMyFriends(), getXoxRooms()]);
+      setFriends(friendRows);
+      setRooms(roomRows);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Could not load XOX games.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      let unsub: (() => void) | undefined;
+
+      load();
+
+      getCurrentUserId()
+        .then((current) => {
+          if (!active || !current) return;
+          unsub = subscribeToMyXoxList(current, load);
+        })
+        .catch(() => {});
+
+      return () => {
+        active = false;
+        unsub?.();
+      };
+    }, [load]),
+  );
+
+  const openRoom = (room: XoxRoom) => {
+    router.push(`/xox-room?roomId=${room.id}`);
+  };
+
+  const challenge = async (friend: PublicUser) => {
+    try {
+      setBusyId(friend.uid);
+      const room = await createXoxRoom({ friend, boardSize });
+      openRoom(room);
+    } catch (e: any) {
+      Alert.alert('Challenge error', e?.message || 'Could not send challenge.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const accept = async (room: XoxRoom) => {
+    try {
+      setBusyId(room.id);
+      const accepted = await acceptXoxRoom(room);
+      openRoom(accepted);
+    } catch (e: any) {
+      Alert.alert('Accept error', e?.message || 'Could not accept challenge.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const decline = async (room: XoxRoom) => {
+    try {
+      setBusyId(room.id);
+      await rejectXoxRoom(room);
+      await load();
+    } catch (e: any) {
+      Alert.alert('Decline error', e?.message || 'Could not decline challenge.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <ScreenShell title="XOX Online" subtitle="Challenge friends to real-time Tic Tac Toe">
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.heroIcon}>
+            <Ionicons name="grid-outline" size={26} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroTitle}>Pick board size</Text>
+            <Text style={styles.heroSub}>
+              Choose size, then tap a friend to challenge them
+            </Text>
+          </View>
+        </View>
+
+        {/* Board size picker */}
+        <View style={styles.sizeRow}>
+          {BOARD_SIZES.map((b) => (
+            <AnimatedPressable
+              key={b.size}
+              style={[
+                styles.sizeCard,
+                boardSize === b.size && { backgroundColor: b.color, borderColor: b.color },
+              ]}
+              onPress={() => setBoardSize(b.size)}
+            >
+              <Text style={styles.sizeLabel}>{b.label}</Text>
+              <Text style={styles.sizeSub}>{b.sub}</Text>
+            </AnimatedPressable>
+          ))}
+        </View>
+
+        {loading && (
+          <ActivityIndicator color="#fff" size="large" style={{ marginVertical: 30 }} />
+        )}
+
+        {/* ── Friends ── */}
+        <SectionHeader title="Friends" count={friends.length} />
+        {!loading && friends.length === 0 && (
+          <EmptyRow text="Add friends first from the Friends screen, then challenge them here." />
+        )}
+        {friends.map((friend) => (
+          <View key={friend.uid} style={styles.friendCard}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials(friend.displayName)}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{friend.displayName}</Text>
+              <Text style={styles.cardMeta}>{boardSize}×{boardSize} • XOX Online</Text>
+            </View>
+            <AnimatedPressable
+              disabled={busyId === friend.uid}
+              style={styles.challengeBtn}
+              onPress={() => challenge(friend)}
+            >
+              {busyId === friend.uid ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="grid-outline" size={14} color="#fff" />
+                  <Text style={styles.challengeText}>Challenge</Text>
+                </>
+              )}
+            </AnimatedPressable>
+          </View>
+        ))}
+
+        {/* ── Incoming ── */}
+        <SectionHeader title="Incoming Challenges" count={rooms.incoming.length} />
+        {rooms.incoming.length === 0 ? (
+          <EmptyRow text="No incoming XOX challenges." />
+        ) : (
+          rooms.incoming.map((room) => (
+            <XoxRoomCard
+              key={room.id}
+              room={room}
+              uid={uid}
+              busy={busyId === room.id}
+              footer={
+                <View style={styles.rowActions}>
+                  <AnimatedPressable
+                    style={[styles.actionBtn, styles.acceptBtn]}
+                    onPress={() => accept(room)}
+                  >
+                    <Text style={styles.actionText}>Accept</Text>
+                  </AnimatedPressable>
+                  <AnimatedPressable
+                    style={[styles.actionBtn, styles.declineBtn]}
+                    onPress={() => decline(room)}
+                  >
+                    <Text style={styles.actionText}>Decline</Text>
+                  </AnimatedPressable>
+                </View>
+              }
+            />
+          ))
+        )}
+
+        {/* ── Outgoing ── */}
+        <SectionHeader title="Sent Challenges" count={rooms.outgoing.length} />
+        {rooms.outgoing.length === 0 ? (
+          <EmptyRow text="No pending sent challenges." />
+        ) : (
+          rooms.outgoing.map((room) => (
+            <XoxRoomCard
+              key={room.id}
+              room={room}
+              uid={uid}
+              busy={busyId === room.id}
+              footer={
+                <AnimatedPressable
+                  style={styles.continueBtn}
+                  onPress={() => openRoom(room)}
+                >
+                  <Ionicons name="time-outline" size={15} color="#0B1020" />
+                  <Text style={styles.continueText}>Waiting... (tap to view)</Text>
+                </AnimatedPressable>
+              }
+            />
+          ))
+        )}
+
+        {/* ── Active ── */}
+        <SectionHeader title="Active Games" count={rooms.active.length} />
+        {rooms.active.length === 0 ? (
+          <EmptyRow text="No active games right now." />
+        ) : (
+          rooms.active.map((room) => (
+            <XoxRoomCard
+              key={room.id}
+              room={room}
+              uid={uid}
+              busy={busyId === room.id}
+              footer={
+                <AnimatedPressable
+                  style={styles.continueBtn}
+                  onPress={() => openRoom(room)}
+                >
+                  <Ionicons name="play" size={15} color="#0B1020" />
+                  <Text style={styles.continueText}>Continue</Text>
+                </AnimatedPressable>
+              }
+            />
+          ))
+        )}
+
+        {/* ── Completed (collapsible) ── */}
+        <AnimatedPressable
+          style={styles.completedHeader}
+          onPress={() => setShowCompleted((v) => !v)}
+        >
+          <Text style={styles.sectionTitle}>Completed Games</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{rooms.completed.length}</Text>
+          </View>
+          <Ionicons
+            name={showCompleted ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color="rgba(255,255,255,0.65)"
+          />
+        </AnimatedPressable>
+
+        {showCompleted &&
+          (rooms.completed.length === 0 ? (
+            <EmptyRow text="Completed games will appear here." />
+          ) : (
+            rooms.completed.slice(0, 12).map((room) => (
+              <XoxRoomCard key={room.id} room={room} uid={uid} busy={false} />
+            ))
+          ))}
+
+      </ScrollView>
+    </ScreenShell>
+  );
+}
+
+// ── Sub-components ──────────────────────────────────────────────────────────
+
+function SectionHeader({ title, count }: { title: string; count: number }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{count}</Text>
+      </View>
+    </View>
+  );
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyText}>{text}</Text>
+    </View>
+  );
+}
+
+function XoxRoomCard({
+  room,
+  uid,
+  busy,
+  footer,
+}: {
+  room: XoxRoom;
+  uid: string | null;
+  busy: boolean;
+  footer?: React.ReactNode;
+}) {
+  const opponent   = uid === room.player1Id ? room.player2Name : room.player1Name;
+  const myMark     = uid === room.player1Id ? 'X' : 'O';
+  const opponentMark = myMark === 'X' ? 'O' : 'X';
+  const resultText = !room.winner
+    ? room.status.replace('_', ' ').toUpperCase()
+    : room.winner === 'draw'
+    ? 'DRAW'
+    : room.winner === myMark
+    ? 'YOU WON'
+    : `${opponent} WON`;
+  const resultColor = !room.winner
+    ? '#FFD23F'
+    : room.winner === 'draw'
+    ? '#FFD23F'
+    : room.winner === myMark
+    ? '#4CC38A'
+    : '#FF4D8D';
+
+  return (
+    <View style={styles.roomCard}>
+      <View style={styles.roomRow}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials(opponent)}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle}>{opponent}</Text>
+          <Text style={styles.cardMeta}>{room.boardSize}×{room.boardSize} Board</Text>
+          <Text style={[styles.statusText, { color: resultColor }]}>{resultText}</Text>
+        </View>
+        {busy && <ActivityIndicator color="#fff" size="small" />}
+      </View>
+      {footer ?? null}
+    </View>
+  );
+}
+
+// ── Styles ──────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  content: { padding: 18, paddingBottom: 36, gap: 12 },
+
+  hero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: 28,
+    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  heroIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 22,
+    backgroundColor: '#8E6BFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTitle: { color: '#fff', fontSize: 19, fontWeight: '900' },
+  heroSub: {
+    color: 'rgba(255,255,255,0.68)',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+
+  sizeRow: { flexDirection: 'row', gap: 10 },
+  sizeCard: {
+    flex: 1,
+    borderRadius: 22,
+    padding: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    gap: 4,
+  },
+  sizeLabel: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  sizeSub:   { color: 'rgba(255,255,255,0.70)', fontWeight: '700', fontSize: 11 },
+
+  section: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  sectionTitle: { color: '#fff', fontWeight: '900', fontSize: 17 },
+  badge: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+
+  completedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 10,
+  },
+
+  friendCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 24,
+    padding: 13,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  roomCard: {
+    borderRadius: 24,
+    padding: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    gap: 12,
+  },
+  roomRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 18,
+    backgroundColor: '#8E6BFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { color: '#fff', fontWeight: '900', fontSize: 18 },
+  cardTitle:  { color: '#fff', fontWeight: '900', fontSize: 16 },
+  cardMeta:   { color: 'rgba(255,255,255,0.64)', fontWeight: '700', fontSize: 12, marginTop: 2 },
+  statusText: { fontWeight: '900', fontSize: 10, marginTop: 5 },
+
+  challengeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#8E6BFF',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    minWidth: 96,
+    justifyContent: 'center',
+  },
+  challengeText: { color: '#fff', fontWeight: '900', fontSize: 13 },
+
+  rowActions: { flexDirection: 'row', gap: 8 },
+  actionBtn:  { flex: 1, alignItems: 'center', borderRadius: 16, paddingVertical: 11 },
+  acceptBtn:  { backgroundColor: '#4CC38A' },
+  declineBtn: { backgroundColor: '#FF4D8D' },
+  actionText: { color: '#fff', fontWeight: '900' },
+
+  continueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#4CC38A',
+    borderRadius: 16,
+    paddingVertical: 12,
+  },
+  continueText: { color: '#0B1020', fontWeight: '900' },
+
+  empty: {
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  emptyText: {
+    color: 'rgba(255,255,255,0.58)',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+});

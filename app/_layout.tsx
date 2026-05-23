@@ -7,17 +7,27 @@ import { Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
   acceptBattleRoom,
+  acceptXoxRoom,
   BattleRoom,
   getCurrentUserId,
   rejectBattleRoom,
+  rejectXoxRoom,
   subscribeToIncomingBattles,
+  subscribeToIncomingXox,
+  XoxRoom,
 } from '../lib/online';
 import { BattleNotificationModal } from '../components/BattleNotificationModal';
+import { XoxNotificationModal } from '../components/XoxNotificationModal';
 
 export default function RootLayout() {
   const [pendingBattle, setPendingBattle] = useState<BattleRoom | null>(null);
-  const [acceptBusy, setAcceptBusy] = useState(false);
+  const [acceptBusy,    setAcceptBusy]    = useState(false);
   const shownRoomIds = useRef<Set<string>>(new Set());
+
+  // ── XOX incoming challenge state ──────────────────────────────────────────
+  const [pendingXox,    setPendingXox]    = useState<XoxRoom | null>(null);
+  const [xoxAcceptBusy, setXoxAcceptBusy] = useState(false);
+  const shownXoxIds = useRef<Set<string>>(new Set());
 
   // ── Global incoming battle notifications (fires on every screen) ──────────
   useEffect(() => {
@@ -34,6 +44,22 @@ export default function RootLayout() {
     }).catch(() => {});
 
     return () => cleanup?.();
+  }, []);
+
+  // ── Global incoming XOX challenge notifications ───────────────────────────
+  useEffect(() => {
+    let cleanupXox: (() => void) | undefined;
+
+    getCurrentUserId().then((uid) => {
+      if (!uid) return;
+      cleanupXox = subscribeToIncomingXox(uid, (room: XoxRoom) => {
+        if (shownXoxIds.current.has(room.id)) return;
+        shownXoxIds.current.add(room.id);
+        setPendingXox(room);
+      });
+    }).catch(() => {});
+
+    return () => cleanupXox?.();
   }, []);
 
   const handleAccept = async () => {
@@ -59,6 +85,28 @@ export default function RootLayout() {
     if (!pendingBattle) return;
     rejectBattleRoom(pendingBattle).catch(() => {});
     setPendingBattle(null);
+  };
+
+  // XOX accept / reject handlers
+  const handleXoxAccept = async () => {
+    if (!pendingXox) return;
+    setXoxAcceptBusy(true);
+    try {
+      await acceptXoxRoom(pendingXox);
+      const room = pendingXox;
+      setPendingXox(null);
+      router.replace(`/xox-room?roomId=${room.id}`);
+    } catch {
+      Alert.alert('Error', 'Could not accept XOX challenge. Open XOX Online to try again.');
+    } finally {
+      setXoxAcceptBusy(false);
+    }
+  };
+
+  const handleXoxReject = () => {
+    if (!pendingXox) return;
+    rejectXoxRoom(pendingXox).catch(() => {});
+    setPendingXox(null);
   };
 
   return (
@@ -87,14 +135,24 @@ export default function RootLayout() {
         <Stack.Screen name="settings" />
         <Stack.Screen name="help" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         <Stack.Screen name="winner" />
+        <Stack.Screen name="xox-battle" />
+        <Stack.Screen name="xox-room" />
       </Stack>
 
-      {/* Global battle challenge popup — appears over any screen */}
+      {/* Global word-battle challenge popup */}
       <BattleNotificationModal
         room={pendingBattle}
         onAccept={handleAccept}
         onReject={handleReject}
         acceptBusy={acceptBusy}
+      />
+
+      {/* Global XOX challenge popup */}
+      <XoxNotificationModal
+        room={pendingXox}
+        onAccept={handleXoxAccept}
+        onReject={handleXoxReject}
+        acceptBusy={xoxAcceptBusy}
       />
     </>
   );

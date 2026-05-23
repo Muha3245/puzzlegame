@@ -946,6 +946,240 @@ export function subscribeToBattleScore(
   };
 }
 
+// ─── XOX Online Types ────────────────────────────────────────────────────────
+
+export type XoxRoom = {
+  id: string;
+  player1Id: string;
+  player2Id: string;
+  player1Name: string;
+  player2Name: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  boardSize: number;
+  board: (null | 'X' | 'O')[];
+  currentTurn: 'X' | 'O';
+  winner: 'X' | 'O' | 'draw' | null;
+  winnerId: string | null;
+  createdAt?: any;
+  updatedAt?: any;
+};
+
+function mapXoxRoom(row: any): XoxRoom {
+  let board: (null | 'X' | 'O')[] = [];
+  try { board = JSON.parse(row.board || '[]'); } catch {}
+  if (!board.length) {
+    const n = row.board_size || 3;
+    board = Array(n * n).fill(null);
+  }
+  return {
+    id: row.id,
+    player1Id: row.player1_id,
+    player2Id: row.player2_id,
+    player1Name: row.player1_name || 'Player 1',
+    player2Name: row.player2_name || 'Player 2',
+    status: row.status,
+    boardSize: row.board_size || 3,
+    board,
+    currentTurn: (row.current_turn as 'X' | 'O') || 'X',
+    winner: row.winner || null,
+    winnerId: row.winner_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// ─── XOX CRUD ────────────────────────────────────────────────────────────────
+
+export async function createXoxRoom({
+  friend,
+  boardSize,
+}: {
+  friend: PublicUser;
+  boardSize: number;
+}): Promise<XoxRoom> {
+  const me = await getMyProfile();
+  if (!me) throw new Error('Please login first.');
+
+  const n = boardSize || 3;
+  const payload = {
+    player1_id: me.uid,
+    player2_id: friend.uid,
+    player1_name: me.displayName,
+    player2_name: friend.displayName,
+    status: 'pending',
+    board_size: n,
+    board: JSON.stringify(Array(n * n).fill(null)),
+    current_turn: 'X',
+    winner: null,
+    winner_id: null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('xox_rooms')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapXoxRoom(data);
+}
+
+export async function getXoxRooms(): Promise<{
+  incoming: XoxRoom[];
+  outgoing: XoxRoom[];
+  active: XoxRoom[];
+  completed: XoxRoom[];
+}> {
+  const uid = await getCurrentUserId();
+  if (!uid) return { incoming: [], outgoing: [], active: [], completed: [] };
+
+  const { data, error } = await supabase
+    .from('xox_rooms')
+    .select('*')
+    .or(`player1_id.eq.${uid},player2_id.eq.${uid}`)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  const rooms = (data ?? []).map(mapXoxRoom);
+
+  return {
+    incoming: rooms.filter((r) => r.status === 'pending' && r.player2Id === uid),
+    outgoing: rooms.filter((r) => r.status === 'pending' && r.player1Id === uid),
+    active: rooms.filter((r) => r.status === 'in_progress'),
+    completed: rooms.filter((r) => r.status === 'completed'),
+  };
+}
+
+export async function getXoxRoom(roomId: string): Promise<XoxRoom | null> {
+  const { data, error } = await supabase
+    .from('xox_rooms')
+    .select('*')
+    .eq('id', roomId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapXoxRoom(data) : null;
+}
+
+export async function acceptXoxRoom(room: XoxRoom): Promise<XoxRoom> {
+  const { data, error } = await supabase
+    .from('xox_rooms')
+    .update({ status: 'in_progress', updated_at: new Date().toISOString() })
+    .eq('id', room.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapXoxRoom(data);
+}
+
+export async function rejectXoxRoom(room: XoxRoom): Promise<void> {
+  const { error } = await supabase.from('xox_rooms').delete().eq('id', room.id);
+  if (error) throw error;
+}
+
+export async function makeXoxMove({
+  roomId,
+  board,
+  nextTurn,
+  winner,
+  winnerId,
+}: {
+  roomId: string;
+  board: (null | 'X' | 'O')[];
+  nextTurn: 'X' | 'O';
+  winner: 'X' | 'O' | 'draw' | null;
+  winnerId: string | null;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('xox_rooms')
+    .update({
+      board: JSON.stringify(board),
+      current_turn: nextTurn,
+      winner: winner ?? null,
+      winner_id: winnerId,
+      status: winner ? 'completed' : 'in_progress',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', roomId);
+  if (error) throw error;
+}
+
+// ─── XOX Realtime ─────────────────────────────────────────────────────────────
+
+/** postgres_changes — fires when the room row is updated in DB */
+export function subscribeToXoxRoom(
+  roomId: string,
+  onChange: (room: XoxRoom) => void,
+) {
+  const channel = supabase
+    .channel(`xox-room-${roomId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'xox_rooms', filter: `id=eq.${roomId}` },
+      (payload: any) => onChange(mapXoxRoom(payload.new)),
+    )
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+/** All inserts/deletes — for lobby list refresh */
+export function subscribeToMyXoxList(userId: string, onChange: () => void) {
+  const channel = supabase
+    .channel(`xox-list-${userId}-${Date.now()}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'xox_rooms' }, onChange)
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+/** Fires when a new XOX room targets this user as player2 */
+export function subscribeToIncomingXox(
+  userId: string,
+  onNewRoom: (room: XoxRoom) => void,
+) {
+  const channel = supabase
+    .channel(`xox-incoming-${userId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'xox_rooms' },
+      (payload: any) => {
+        if (payload.new?.player2_id === userId) onNewRoom(mapXoxRoom(payload.new));
+      },
+    )
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+// ─── XOX Broadcast (instant move sync, bypasses RLS) ─────────────────────────
+
+export type XoxMoveBroadcast = {
+  index: number;
+  mark: 'X' | 'O';
+  board: (null | 'X' | 'O')[];
+  nextTurn: 'X' | 'O';
+  winner: 'X' | 'O' | 'draw' | null;
+  winnerId: string | null;
+};
+
+export function subscribeToXoxBroadcast(
+  roomId: string,
+  onMove: (data: XoxMoveBroadcast) => void,
+): { send: (data: XoxMoveBroadcast) => void; cleanup: () => void } {
+  const channel = supabase
+    .channel(`xox-broadcast-${roomId}`, { config: { broadcast: { self: false } } })
+    .on(
+      'broadcast',
+      { event: 'move' },
+      ({ payload }: { payload: XoxMoveBroadcast }) => onMove(payload),
+    )
+    .subscribe();
+
+  return {
+    send: (data: XoxMoveBroadcast) =>
+      channel.send({ type: 'broadcast', event: 'move', payload: data }),
+    cleanup: () => supabase.removeChannel(channel),
+  };
+}
+
 // ─── Battle Chat Broadcast (ephemeral, NOT stored in DB) ─────────────────────
 // Uses Supabase Realtime Broadcast only. Messages disappear when the screen
 // reloads/unmounts and are never inserted into any table.

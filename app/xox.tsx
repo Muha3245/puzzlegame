@@ -11,13 +11,14 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { router } from 'expo-router';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { ScreenShell } from '../components/ScreenShell';
 import { playDrawSound, playGameSound, playLoseSound, playWinSound } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 
 type Mark = 'X' | 'O' | null;
-type Mode = 'bot' | 'local';
+type Mode = 'bot' | 'local' | 'online';
 type BotLevel = 'easy' | 'medium' | 'hard';
 type BoardSize = 3 | 4 | 5;
 
@@ -28,8 +29,9 @@ const DIFF_META: Record<BotLevel, { label: string; color: string; icon: keyof ty
 };
 
 const MODES = [
-  { id: 'bot' as Mode, icon: 'hardware-chip-outline' as const, label: 'VS BOT', sub: 'Play vs AI' },
-  { id: 'local' as Mode, icon: 'people-outline' as const, label: '2 PLAYERS', sub: 'Pass & Play' },
+  { id: 'bot'    as Mode, icon: 'hardware-chip-outline' as const, label: 'VS BOT',    sub: 'Play vs AI' },
+  { id: 'local'  as Mode, icon: 'people-outline'        as const, label: '2 PLAYERS', sub: 'Pass & Play' },
+  { id: 'online' as Mode, icon: 'wifi-outline'          as const, label: 'ONLINE',    sub: 'Challenge Friends' },
 ];
 
 const BOARD_SIZES: { size: BoardSize; label: string; sub: string }[] = [
@@ -436,6 +438,10 @@ export default function Xox() {
                     key={m.id}
                     style={[styles.modeCard, active && styles.modeCardActive]}
                     onPress={() => {
+                      if (m.id === 'online') {
+                        router.push('/xox-battle');
+                        return;
+                      }
                       setMode(m.id);
                       reset();
                     }}
