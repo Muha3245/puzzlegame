@@ -3,7 +3,7 @@ import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { STRIPE_COLORS } from '../constants/categories';
 import { buildPuzzle } from '../lib/puzzle';
-import { playGameSound } from '../lib/audio';
+import { playGameSound, playLetterSelect, playWordDrag } from '../lib/audio';
 
 export type Point = [number, number];
 
@@ -262,7 +262,7 @@ export function WordGrid({
         };
 
         resetDrag();
-        playGameSound('correct', soundEnabled).catch(() => {});
+        playGameSound('wordFound', soundEnabled).catch(() => {});
 
         animateMatchedLine(finalEntry, () => {
           onFoundRef.current(finalEntry);
@@ -295,7 +295,7 @@ export function WordGrid({
 
         setDragStart(point);
         setDragEnd(point);
-        playGameSound('tap', soundEnabled).catch(() => {});
+        playLetterSelect(soundEnabled).catch(() => {});
       },
       onPanResponderMove: (evt) => {
         if (animatingRef.current) return;
@@ -304,7 +304,11 @@ export function WordGrid({
         const point = pointFromTouch(locationX, locationY);
 
         dragEndRef.current = point;
-        setDragEnd((prev) => (samePoint(prev, point) ? prev : point));
+        setDragEnd((prev) => {
+          if (samePoint(prev, point)) return prev;
+          playWordDrag(soundEnabled).catch(() => {});
+          return point;
+        });
       },
       onPanResponderRelease: finishSelection,
       onPanResponderTerminate: finishSelection,

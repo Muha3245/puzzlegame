@@ -162,6 +162,16 @@ export async function ensureUserProfile(
   return safeName;
 }
 
+export async function updatePhotoURL(photoURL: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return;
+  const { error } = await supabase
+    .from('users')
+    .update({ photo_url: photoURL, updated_at: new Date().toISOString() })
+    .eq('uid', session.user.id);
+  if (error) throw error;
+}
+
 export async function registerWithEmail(
   name: string,
   email: string,

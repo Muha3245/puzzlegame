@@ -21,7 +21,7 @@ export function ScreenShell({
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
           {showBack ? (
             <AnimatedPressable

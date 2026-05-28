@@ -10,6 +10,8 @@ export type PlayerProfile = {
   name: string;
   avatar: string;
   levelTitle: string;
+  photoURL?: string;
+  frameId?: string;
 };
 
 export type AppState = {

@@ -35,7 +35,7 @@ import { FoundEntry, WordGrid } from "../components/WordGrid";
 import { CATEGORIES, STRIPE_COLORS } from "../constants/categories";
 import { Theme } from "../constants/theme";
 import * as Haptics from "expo-haptics";
-import { playGameSound } from "../lib/audio";
+import { playGameSound, playWordCompleted, playCoinSound, playLevelUnlock } from "../lib/audio";
 import { Confetti } from "../components/Confetti";
 import {
   BattleBroadcastPayload,
@@ -915,7 +915,7 @@ export default function Game() {
     const reward = rewardOptions[index] ?? 0;
     setSelectedReward(index);
     setRewardCoins(reward);
-    if (reward > 0) addCoins(reward);
+    if (reward > 0) { addCoins(reward); playCoinSound(state.settings.sound).catch(() => {}); }
     completeOnlineLevel({
       categoryKey,
       difficulty,
@@ -945,7 +945,8 @@ export default function Game() {
 
       setFound(newFound);
 
-      playGameSound("wordFound", state.settings.sound);
+      if (isLevelComplete) playWordCompleted(state.settings.sound).catch(() => {});
+      else playGameSound("wordFound", state.settings.sound);
       if (state.settings.haptics)
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       setBanner({
@@ -1140,6 +1141,7 @@ export default function Game() {
 
   // ── Navigation ──
   const goNext = () => {
+    playLevelUnlock(state.settings.sound).catch(() => {});
     if (levelNumber < LEVELS_PER_CATEGORY) {
       const extra = isMulti
         ? `&mode=multi&p1=${encodeURIComponent(player1)}&p2=${encodeURIComponent(player2)}`

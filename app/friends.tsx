@@ -8,6 +8,7 @@ import {
   Alert,
   FlatList,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -114,11 +115,12 @@ export default function FriendsScreen() {
       : friends.map((item) => ({ type: 'friend' as const, item }))),
   ];
 
-  const { C } = useAppTheme();
+  const { C, scheme, toggle } = useAppTheme();
 
   return (
     <View style={[styles.bg, { backgroundColor: C.bg }]}>
-      <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
           <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
@@ -133,6 +135,9 @@ export default function FriendsScreen() {
               <Text style={[styles.sub, { color: C.muted }]}>Search players & send requests</Text>
             </View>
           </View>
+          <Pressable onPress={toggle} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={20} color={C.ink} />
+          </Pressable>
         </View>
 
         {/* Search bar */}

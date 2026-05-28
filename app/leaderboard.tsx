@@ -41,8 +41,8 @@ type Palette = {
 const RANK_LABELS = ["1st", "2nd", "3rd"];
 const PODIUM_HEIGHTS = [112, 86, 72];
 
-function getPalette(C: any): Palette {
-  const isDark = C.mode === "dark";
+function getPalette(C: any, scheme: string): Palette {
+  const isDark = scheme === "dark";
 
   return {
     primary: C.primary || "#D94F2B",
@@ -92,8 +92,8 @@ function getRankStyle(rankIndex: number, palette: Palette) {
 
 // ── Podium component for top 3 ────────────────────────────────────────────────
 function Podium({ top3 }: { top3: LeaderboardUser[] }) {
-  const { C } = useAppTheme();
-  const palette = getPalette(C);
+  const { C, scheme } = useAppTheme();
+  const palette = getPalette(C, scheme);
 
   const scales = useRef([
     new Animated.Value(0),
@@ -221,8 +221,8 @@ function Podium({ top3 }: { top3: LeaderboardUser[] }) {
 }
 
 export default function LeaderboardScreen() {
-  const { C } = useAppTheme();
-  const palette = getPalette(C);
+  const { C, scheme, toggle } = useAppTheme();
+  const palette = getPalette(C, scheme);
 
   const [players, setPlayers] = useState<LeaderboardUser[]>([]);
   const [myUid, setMyUid] = useState<string | null>(null);
@@ -285,9 +285,9 @@ export default function LeaderboardScreen() {
 
   return (
     <View style={[styles.bg, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle={C.statusBar || (C.mode === "dark" ? "light-content" : "dark-content")} backgroundColor={C.bg} />
+      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
 
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable
@@ -323,6 +323,10 @@ export default function LeaderboardScreen() {
               </Text>
             </View>
           </View>
+
+          <Pressable onPress={toggle} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={20} color={C.ink} />
+          </Pressable>
         </View>
 
         {/* Summary */}

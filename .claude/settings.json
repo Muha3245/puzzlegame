@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "PowerShell(python --version 2>&1; python3 --version 2>&1; \\(Get-Command python -ErrorAction SilentlyContinue\\).Source; node --version 2>&1)",
+      "Bash(node generate-sounds.js)"
+    ]
+  },
   "enabledPlugins": {
     "expo@claude-plugins-official": true
   }

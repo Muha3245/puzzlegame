@@ -11,74 +11,25 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppTheme } from '../lib/appTheme';
 import { useAppState } from '../lib/storage';
 
-const BG = '#EDE8E1';
-const INK = '#1C1C1E';
-const MUTED = '#8A8480';
-const DIVIDER = '#D8D3CC';
 const ORANGE = '#D94F2B';
 const GREEN = '#4CC38A';
 const YELLOW = '#FFD23F';
 const PURPLE = '#8E6BFF';
 
 const PACKS = [
-  {
-    id: 'p1',
-    coins: 100,
-    bonus: 0,
-    price: '$0.99',
-    label: 'Starter',
-    tag: 'Small boost',
-    color: ORANGE,
-  },
-  {
-    id: 'p2',
-    coins: 500,
-    bonus: 50,
-    price: '$3.99',
-    label: 'Handy',
-    tag: 'Good for hints',
-    color: GREEN,
-  },
-  {
-    id: 'p3',
-    coins: 1500,
-    bonus: 200,
-    price: '$9.99',
-    label: 'Best Value',
-    tag: 'Most popular',
-    color: YELLOW,
-    popular: true,
-  },
-  {
-    id: 'p4',
-    coins: 5000,
-    bonus: 1000,
-    price: '$24.99',
-    label: 'Mega',
-    tag: 'Battle ready',
-    color: PURPLE,
-  },
-  {
-    id: 'p5',
-    coins: 15000,
-    bonus: 4000,
-    price: '$59.99',
-    label: 'Ultimate',
-    tag: 'Power player',
-    color: '#E94B8C',
-  },
+  { id: 'p1', coins: 100, bonus: 0, price: '$0.99', label: 'Starter', tag: 'Small boost', color: ORANGE },
+  { id: 'p2', coins: 500, bonus: 50, price: '$3.99', label: 'Handy', tag: 'Good for hints', color: GREEN },
+  { id: 'p3', coins: 1500, bonus: 200, price: '$9.99', label: 'Best Value', tag: 'Most popular', color: YELLOW, popular: true },
+  { id: 'p4', coins: 5000, bonus: 1000, price: '$24.99', label: 'Mega', tag: 'Battle ready', color: PURPLE },
+  { id: 'p5', coins: 15000, bonus: 4000, price: '$59.99', label: 'Ultimate', tag: 'Power player', color: '#E94B8C' },
 ];
 
 const DAILY_REWARDS = [
-  { day: 1, coins: 10 },
-  { day: 2, coins: 15 },
-  { day: 3, coins: 20 },
-  { day: 4, coins: 25 },
-  { day: 5, coins: 30 },
-  { day: 6, coins: 50 },
-  { day: 7, coins: 100 },
+  { day: 1, coins: 10 }, { day: 2, coins: 15 }, { day: 3, coins: 20 },
+  { day: 4, coins: 25 }, { day: 5, coins: 30 }, { day: 6, coins: 50 }, { day: 7, coins: 100 },
 ];
 
 function totalCoins(pack: (typeof PACKS)[number]) {
@@ -86,6 +37,7 @@ function totalCoins(pack: (typeof PACKS)[number]) {
 }
 
 export default function Coins() {
+  const { C, scheme, toggle } = useAppTheme();
   const { state, addCoins } = useAppState();
   const insets = useSafeAreaInsets();
 
@@ -93,29 +45,23 @@ export default function Coins() {
   const [busy, setBusy] = useState(false);
   const [successText, setSuccessText] = useState('');
 
-  const selected = useMemo(
-    () => PACKS.find((pack) => pack.id === selectedPack) || PACKS[2],
-    [selectedPack]
-  );
+  const selected = useMemo(() => PACKS.find((p) => p.id === selectedPack) ?? PACKS[2], [selectedPack]);
+
+  const balanceCardBg = scheme === 'dark' ? '#2A2725' : '#1C1C1E';
+  const packSelectedBg = scheme === 'dark' ? 'rgba(255,122,0,0.12)' : '#FFF8EC';
 
   const handleBuy = () => {
     if (busy) return;
-
     const amount = totalCoins(selected);
-
     setBusy(true);
     addCoins(amount);
     setSuccessText(`+${amount.toLocaleString()} coins added`);
-
-    setTimeout(() => {
-      setBusy(false);
-      setSuccessText('');
-    }, 1200);
+    setTimeout(() => { setBusy(false); setSuccessText(''); }, 1200);
   };
 
   return (
-    <View style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+    <View style={[styles.safe, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
 
       <ScrollView
         style={styles.scroll}
@@ -124,59 +70,56 @@ export default function Coins() {
           styles.content,
           {
             paddingTop: insets.top,
-            paddingBottom:
-              Platform.OS === 'ios'
-                ? Math.max(insets.bottom, 24) + 24
-                : Math.max(insets.bottom, 18) + 24,
+            paddingBottom: Platform.OS === 'ios'
+              ? Math.max(insets.bottom, 24) + 24
+              : Math.max(insets.bottom, 18) + 24,
           },
         ]}
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={22} color={INK} />
+          <Pressable onPress={() => router.back()} style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
 
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Coin Store</Text>
-            <Text style={styles.headerSub}>Upgrade your game power</Text>
+            <Text style={[styles.headerTitle, { color: C.ink }]}>Coin Store</Text>
+            <Text style={[styles.headerSub, { color: C.muted }]}>Upgrade your game power</Text>
           </View>
 
-          <Pressable onPress={() => router.push('/settings')} style={styles.iconBtn}>
-            <Ionicons name="settings-outline" size={20} color={INK} />
+          <Pressable onPress={toggle} style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={20} color={C.ink} />
           </Pressable>
         </View>
 
         {/* Balance card */}
-        <View style={styles.balanceCard}>
+        <View style={[styles.balanceCard, { backgroundColor: balanceCardBg }]}>
           <View>
             <Text style={styles.balanceLabel}>YOUR BALANCE</Text>
             <Text style={styles.balanceValue}>{state.coins.toLocaleString()}</Text>
             <Text style={styles.balanceSub}>Available coins</Text>
           </View>
-
           <View style={styles.bigCoin}>
-            <Ionicons name="logo-bitcoin" size={34} color={INK} />
+            <Ionicons name="logo-bitcoin" size={34} color="#1C1C1E" />
           </View>
         </View>
 
         {/* Info strip */}
-        <View style={styles.infoStrip}>
+        <View style={[styles.infoStrip, { backgroundColor: C.surface, borderColor: C.divider }]}>
           <View style={styles.infoIcon}>
             <Ionicons name="flash" size={15} color="#fff" />
           </View>
-          <Text style={styles.infoText}>
+          <Text style={[styles.infoText, { color: C.muted }]}>
             For now, purchase button directly adds coins. No payment gateway is connected.
           </Text>
         </View>
 
         {/* Packages header */}
         <View style={styles.sectionBar}>
-          <Text style={styles.sectionLabel}># COIN PACKAGES</Text>
-          <Text style={styles.sectionHint}>Tap to select</Text>
+          <Text style={[styles.sectionLabel, { color: C.muted }]}># COIN PACKAGES</Text>
+          <Text style={[styles.sectionHint, { color: C.ink }]}>Tap to select</Text>
         </View>
-
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: C.divider }]} />
 
         {/* Coin packages */}
         <View style={styles.packsWrap}>
@@ -190,8 +133,11 @@ export default function Coins() {
                 onPress={() => setSelectedPack(pack.id)}
                 style={[
                   styles.packCard,
-                  isSelected && styles.packCardSelected,
-                  pack.popular && styles.packCardPopular,
+                  {
+                    backgroundColor: isSelected ? packSelectedBg : C.surface,
+                    borderColor: isSelected ? ORANGE : pack.popular ? YELLOW : C.divider,
+                    borderWidth: isSelected ? 2 : 1,
+                  },
                 ]}
               >
                 {pack.popular && (
@@ -201,37 +147,24 @@ export default function Coins() {
                 )}
 
                 <View style={styles.packTop}>
-                  <Text style={styles.packNum}>0{index + 1}</Text>
-
-                  <View
-                    style={[
-                      styles.packIcon,
-                      {
-                        backgroundColor: isSelected ? INK : '#fff',
-                        borderColor: isSelected ? INK : DIVIDER,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="logo-bitcoin"
-                      size={22}
-                      color={isSelected ? YELLOW : INK}
-                    />
+                  <Text style={[styles.packNum, { color: C.divider }]}>0{index + 1}</Text>
+                  <View style={[styles.packIcon, { backgroundColor: isSelected ? C.ink : C.bg, borderColor: isSelected ? C.ink : C.divider }]}>
+                    <Ionicons name="logo-bitcoin" size={22} color={isSelected ? YELLOW : C.ink} />
                   </View>
                 </View>
 
-                <Text style={styles.packLabel}>{pack.label}</Text>
-                <Text style={styles.packCoins}>{amount.toLocaleString()}</Text>
+                <Text style={[styles.packLabel, { color: C.ink }]}>{pack.label}</Text>
+                <Text style={[styles.packCoins, { color: C.ink }]}>{amount.toLocaleString()}</Text>
 
                 <View style={styles.packMetaRow}>
-                  <Text style={styles.packTag}>{pack.tag}</Text>
+                  <Text style={[styles.packTag, { color: C.muted }]}>{pack.tag}</Text>
                   <Text style={styles.packPrice}>{pack.price}</Text>
                 </View>
 
                 {pack.bonus > 0 && (
-                  <View style={styles.bonusPill}>
-                    <Ionicons name="gift-outline" size={12} color="#fff" />
-                    <Text style={styles.bonusText}>
+                  <View style={[styles.bonusPill, { backgroundColor: C.ink }]}>
+                    <Ionicons name="gift-outline" size={12} color={C.bg} />
+                    <Text style={[styles.bonusText, { color: C.bg }]}>
                       +{pack.bonus.toLocaleString()} bonus
                     </Text>
                   </View>
@@ -249,48 +182,45 @@ export default function Coins() {
 
         {/* Daily rewards */}
         <View style={styles.sectionBar}>
-          <Text style={styles.sectionLabel}># DAILY REWARDS</Text>
-          <Text style={styles.sectionHint}>Login bonus</Text>
+          <Text style={[styles.sectionLabel, { color: C.muted }]}># DAILY REWARDS</Text>
+          <Text style={[styles.sectionHint, { color: C.ink }]}>Login bonus</Text>
         </View>
-
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: C.divider }]} />
 
         <View style={styles.rewardsRow}>
           {DAILY_REWARDS.map((reward) => (
-            <View key={reward.day} style={styles.rewardCard}>
-              <Text style={styles.rewardDay}>D{reward.day}</Text>
+            <View key={reward.day} style={[styles.rewardCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
+              <Text style={[styles.rewardDay, { color: C.muted }]}>D{reward.day}</Text>
               <View style={styles.rewardIcon}>
-                <Ionicons name="gift-outline" size={15} color={INK} />
+                <Ionicons name="gift-outline" size={15} color="#1C1C1E" />
               </View>
-              <Text style={styles.rewardCoins}>{reward.coins}</Text>
+              <Text style={[styles.rewardCoins, { color: C.ink }]}>{reward.coins}</Text>
             </View>
           ))}
         </View>
 
-        {/* Selected package */}
-        <View style={styles.checkoutCard}>
+        {/* Checkout card */}
+        <View style={[styles.checkoutCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
           <View style={styles.checkoutTop}>
             <View>
-              <Text style={styles.checkoutLabel}>SELECTED PACKAGE</Text>
-              <Text style={styles.checkoutTitle}>{selected.label}</Text>
-              <Text style={styles.checkoutSub}>
+              <Text style={[styles.checkoutLabel, { color: C.muted }]}>SELECTED PACKAGE</Text>
+              <Text style={[styles.checkoutTitle, { color: C.ink }]}>{selected.label}</Text>
+              <Text style={[styles.checkoutSub, { color: C.muted }]}>
                 {selected.coins.toLocaleString()} coins
-                {selected.bonus > 0
-                  ? ` + ${selected.bonus.toLocaleString()} bonus`
-                  : ''}
+                {selected.bonus > 0 ? ` + ${selected.bonus.toLocaleString()} bonus` : ''}
               </Text>
             </View>
 
-            <View style={styles.checkoutPriceBox}>
-              <Text style={styles.checkoutPrice}>{selected.price}</Text>
+            <View style={[styles.checkoutPriceBox, { backgroundColor: C.ink }]}>
+              <Text style={[styles.checkoutPrice, { color: C.bg }]}>{selected.price}</Text>
             </View>
           </View>
 
-          <View style={styles.checkoutDivider} />
+          <View style={[styles.checkoutDivider, { backgroundColor: C.divider }]} />
 
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total coins to add</Text>
-            <Text style={styles.totalValue}>
+            <Text style={[styles.totalLabel, { color: C.muted }]}>Total coins to add</Text>
+            <Text style={[styles.totalValue, { color: C.ink }]}>
               {totalCoins(selected).toLocaleString()}
             </Text>
           </View>
@@ -319,19 +249,9 @@ export default function Coins() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: BG,
-  },
-
-  scroll: {
-    flex: 1,
-  },
-
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: 20,
-  },
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
+  content: { flexGrow: 1, paddingHorizontal: 20 },
 
   header: {
     flexDirection: 'row',
@@ -341,47 +261,21 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
 
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: DIVIDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   iconBtn: {
     width: 40,
     height: 40,
     borderRadius: 14,
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: DIVIDER,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  headerCenter: {
-    alignItems: 'center',
-  },
+  headerCenter: { alignItems: 'center' },
 
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: INK,
-  },
-
-  headerSub: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: MUTED,
-    marginTop: 2,
-  },
+  headerTitle: { fontSize: 18, fontWeight: '900' },
+  headerSub: { fontSize: 11, fontWeight: '700', marginTop: 2 },
 
   balanceCard: {
-    backgroundColor: INK,
     borderRadius: 26,
     padding: 22,
     minHeight: 146,
@@ -427,9 +321,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: DIVIDER,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -446,13 +338,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  infoText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: MUTED,
-    lineHeight: 17,
-  },
+  infoText: { flex: 1, fontSize: 12, fontWeight: '700', lineHeight: 17 },
 
   sectionBar: {
     flexDirection: 'row',
@@ -462,24 +348,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: MUTED,
-    letterSpacing: 1.1,
-  },
+  sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.1 },
+  sectionHint: { fontSize: 11, fontWeight: '700' },
 
-  sectionHint: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: INK,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: DIVIDER,
-    marginBottom: 14,
-  },
+  divider: { height: 1, marginBottom: 14 },
 
   packsWrap: {
     flexDirection: 'row',
@@ -491,22 +363,9 @@ const styles = StyleSheet.create({
   packCard: {
     width: '48.5%',
     minHeight: 170,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: DIVIDER,
     borderRadius: 22,
     padding: 14,
     position: 'relative',
-  },
-
-  packCardSelected: {
-    borderColor: INK,
-    borderWidth: 2,
-    backgroundColor: '#FFF8EC',
-  },
-
-  packCardPopular: {
-    borderColor: YELLOW,
   },
 
   popularBadge: {
@@ -520,12 +379,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
 
-  popularText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: INK,
-    letterSpacing: 0.8,
-  },
+  popularText: { fontSize: 8, fontWeight: '900', color: '#1C1C1E', letterSpacing: 0.8 },
 
   packTop: {
     flexDirection: 'row',
@@ -534,11 +388,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
-  packNum: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: DIVIDER,
-  },
+  packNum: { fontSize: 20, fontWeight: '900' },
 
   packIcon: {
     width: 44,
@@ -549,55 +399,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  packLabel: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: INK,
-  },
+  packLabel: { fontSize: 13, fontWeight: '900' },
+  packCoins: { fontSize: 28, fontWeight: '900', lineHeight: 34, marginTop: 4 },
 
-  packCoins: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: INK,
-    lineHeight: 34,
-    marginTop: 4,
-  },
+  packMetaRow: { marginTop: 6, gap: 2 },
 
-  packMetaRow: {
-    marginTop: 6,
-    gap: 2,
-  },
-
-  packTag: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: MUTED,
-  },
-
-  packPrice: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: ORANGE,
-    marginTop: 2,
-  },
+  packTag: { fontSize: 11, fontWeight: '700' },
+  packPrice: { fontSize: 13, fontWeight: '900', color: ORANGE, marginTop: 2 },
 
   bonusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     alignSelf: 'flex-start',
-    backgroundColor: INK,
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
     marginTop: 10,
   },
 
-  bonusText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#fff',
-  },
+  bonusText: { fontSize: 10, fontWeight: '800' },
 
   selectedMark: {
     position: 'absolute',
@@ -619,20 +440,14 @@ const styles = StyleSheet.create({
 
   rewardCard: {
     flex: 1,
-    backgroundColor: '#fff',
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: DIVIDER,
     paddingVertical: 10,
     alignItems: 'center',
     gap: 5,
   },
 
-  rewardDay: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: MUTED,
-  },
+  rewardDay: { fontSize: 9, fontWeight: '900' },
 
   rewardIcon: {
     width: 28,
@@ -643,17 +458,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  rewardCoins: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: INK,
-  },
+  rewardCoins: { fontSize: 11, fontWeight: '900' },
 
   checkoutCard: {
-    backgroundColor: '#fff',
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: DIVIDER,
     padding: 16,
   },
 
@@ -663,45 +472,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
-  checkoutLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: MUTED,
-    letterSpacing: 0.9,
-  },
-
-  checkoutTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: INK,
-    marginTop: 4,
-  },
-
-  checkoutSub: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: MUTED,
-    marginTop: 2,
-  },
+  checkoutLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.9 },
+  checkoutTitle: { fontSize: 22, fontWeight: '900', marginTop: 4 },
+  checkoutSub: { fontSize: 12, fontWeight: '700', marginTop: 2 },
 
   checkoutPriceBox: {
-    backgroundColor: INK,
     borderRadius: 16,
     paddingHorizontal: 13,
     paddingVertical: 9,
   },
 
-  checkoutPrice: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#fff',
-  },
+  checkoutPrice: { fontSize: 14, fontWeight: '900' },
 
-  checkoutDivider: {
-    height: 1,
-    backgroundColor: DIVIDER,
-    marginVertical: 14,
-  },
+  checkoutDivider: { height: 1, marginVertical: 14 },
 
   totalRow: {
     flexDirection: 'row',
@@ -710,17 +493,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
-  totalLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: MUTED,
-  },
-
-  totalValue: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: INK,
-  },
+  totalLabel: { fontSize: 13, fontWeight: '800' },
+  totalValue: { fontSize: 22, fontWeight: '900' },
 
   buyBtn: {
     minHeight: 54,
@@ -732,13 +506,7 @@ const styles = StyleSheet.create({
     gap: 9,
   },
 
-  buyBtnDisabled: {
-    opacity: 0.85,
-  },
+  buyBtnDisabled: { opacity: 0.85 },
 
-  buyBtnText: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#fff',
-  },
+  buyBtnText: { fontSize: 15, fontWeight: '900', color: '#fff' },
 });

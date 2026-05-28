@@ -35,7 +35,7 @@ import {
   XoxMoveBroadcast,
   XoxRoom,
 } from '../lib/online';
-import { playDrawSound, playGameSound, playLoseSound, playWinSound } from '../lib/audio';
+import { playDrawSound, playLoseSound, playXoxMove, playBattleWin, playBgMusic, stopBgMusic } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 
 type Mark = 'X' | 'O' | null;
@@ -265,6 +265,13 @@ export default function XoxRoomScreen() {
     }
   }, [chatOpen, chatMessages.length]);
 
+  // ── Battle music ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (state.settings.sound) playBgMusic('battle-loop', true).catch(() => {});
+    return () => stopBgMusic();
+  }, [state.settings.sound]);
+
   // ── Sound when game ends ───────────────────────────────────────────────────
 
   useEffect(() => {
@@ -273,7 +280,7 @@ export default function XoxRoomScreen() {
     if (winner === 'draw') {
       playDrawSound(state.settings.sound).catch(() => {});
     } else if (winner === myMark) {
-      playWinSound(state.settings.sound).catch(() => {});
+      playBattleWin(state.settings.sound).catch(() => {});
     } else {
       playLoseSound(state.settings.sound).catch(() => {});
     }
@@ -301,7 +308,7 @@ export default function XoxRoomScreen() {
       setWinLine(result.line);
     }
 
-    playGameSound('tap', state.settings.sound).catch(() => {});
+    playXoxMove(state.settings.sound).catch(() => {});
 
     broadcastRef.current?.send({
       index,

@@ -7,6 +7,8 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useAppTheme } from '../lib/appTheme';
 import BottomTabBar from '../components/BottomTabBar';
+import { playBgMusic, stopBgMusic } from '../lib/audio';
+import { useAppState } from '../lib/storage';
 import {
   acceptBattleRoom,
   acceptXoxRoom,
@@ -22,8 +24,18 @@ import { BattleNotificationModal } from '../components/BattleNotificationModal';
 import { XoxNotificationModal } from '../components/XoxNotificationModal';
 
 function AppShell() {
-  const { C } = useAppTheme();
+  const { C, scheme } = useAppTheme();
   const pathname = usePathname();
+  const { state } = useAppState();
+
+  useEffect(() => {
+    if (state.settings.sound) {
+      playBgMusic('puzzle-loop', true).catch(() => {});
+    } else {
+      stopBgMusic();
+    }
+    return () => stopBgMusic();
+  }, [state.settings.sound]);
 
   const [pendingBattle, setPendingBattle] = useState<BattleRoom | null>(null);
   const [acceptBusy, setAcceptBusy] = useState(false);
@@ -145,7 +157,7 @@ function AppShell() {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <StatusBar style={C.mode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
 
       <View style={styles.stackWrap}>
         <Stack

@@ -22,7 +22,7 @@ import {
   quitBattleRoom,
   subscribeToMyBattleList,
 } from '../lib/online';
-import { playBattleRequestSound } from '../lib/audio';
+import { playBattleRequestSound, playBattleStart } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 
 type DifficultyId = 'easy' | 'medium' | 'hard' | 'pro';
@@ -194,6 +194,7 @@ export default function BattleArena() {
     try {
       setBusyId(room.id);
       await acceptBattleRoom(room);
+      playBattleStart(state.settings.sound).catch(() => {});
       openRoom(room);
     } catch (error: any) {
       Alert.alert('Accept error', error?.message || 'Unable to accept battle.');

@@ -818,42 +818,82 @@ function FloatingCategoryCard({
 
   const progressWidth = `${(completedCount / LEVELS_PER_CATEGORY) * 100}%`;
 
-  const { C } = useAppTheme();
+  const { C, scheme } = useAppTheme();
   const accent = getIconColor(item.name);
+  const dark = scheme === 'dark';
+  const done = completedCount >= LEVELS_PER_CATEGORY;
+  const stars = done ? 3 : completedCount >= Math.ceil(LEVELS_PER_CATEGORY * 0.625) ? 2 : completedCount > 0 ? 1 : 0;
+  const cardBorderColor = done ? 'rgba(76,195,138,0.55)' : withAlpha(accent, dark ? 0.38 : 0.30);
+  const cardBg = done
+    ? (dark ? 'rgba(76,195,138,0.08)' : 'rgba(76,195,138,0.05)')
+    : C.surface;
+  const stripColor = done ? Theme.success : accent;
+
   return (
     <Animated.View style={{ width, transform: [{ translateY }, { scale }] }}>
       <Pressable
         onPress={onPress}
-        onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start()}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.95, useNativeDriver: true }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start()}
         style={[
           styles.categoryCard,
-          {
-            backgroundColor: C.surface,
-            borderColor: C.divider,
-            shadowColor: C.mode === 'dark' ? '#000' : accent,
-          },
+          { backgroundColor: cardBg, borderColor: cardBorderColor, shadowColor: dark ? '#000' : accent },
         ]}
       >
-        <View style={styles.progressTop}>
-          <View style={[styles.progressTrack, { backgroundColor: withAlpha(accent, C.mode === 'dark' ? 0.18 : 0.12) }]}>
-            <View style={[styles.progressFill, { width: progressWidth as any, backgroundColor: accent }]} />
+        {/* Accent top strip */}
+        <View style={[styles.catStrip, { backgroundColor: stripColor }]} />
+
+        {/* Icon with soft glow ring */}
+        <View style={styles.catIconArea}>
+          <View style={[styles.catGlowOuter, { backgroundColor: withAlpha(stripColor, dark ? 0.16 : 0.10) }]}>
+            <View style={[styles.catGlowInner, { backgroundColor: withAlpha(stripColor, dark ? 0.22 : 0.14) }]}>
+              <CategorySvgIcon name={item.name} size={62} />
+            </View>
           </View>
-          <View style={[styles.progressBadge, { backgroundColor: accent }]}>
-            <Text style={styles.progressBadgeText}>{completedCount}/{LEVELS_PER_CATEGORY}</Text>
-          </View>
+          {done && (
+            <View style={styles.catDoneCheck}>
+              <Ionicons name="checkmark-circle" size={20} color={Theme.success} />
+            </View>
+          )}
         </View>
 
-        <View style={styles.iconWrap}>
-          <CategorySvgIcon name={item.name} size={86} />
-        </View>
+        {/* Category name */}
+        <Text numberOfLines={1} style={[styles.catName, { color: C.ink }]}>
+          {item.name}
+        </Text>
 
-        <View style={[styles.categoryTitleWrap, { backgroundColor: withAlpha(accent, C.mode === 'dark' ? 0.20 : 0.10), borderColor: withAlpha(accent, C.mode === 'dark' ? 0.36 : 0.18) }]}>
-          <Text numberOfLines={2} style={[styles.categoryTitle, { color: C.ink }]}>
-            {item.name}
+        {/* Stars + level count */}
+        <View style={styles.catStarsRow}>
+          {[1, 2, 3].map((s) => (
+            <Ionicons
+              key={s}
+              name={s <= stars ? 'star' : 'star-outline'}
+              size={13}
+              color={s <= stars ? Theme.warn : C.muted}
+            />
+          ))}
+          <Text style={[styles.catLevelsText, { color: C.muted }]}>
+            {completedCount}/{LEVELS_PER_CATEGORY}
           </Text>
         </View>
 
+        {/* Progress bar */}
+        <View style={[styles.catProgressTrack, { backgroundColor: withAlpha(stripColor, dark ? 0.18 : 0.12) }]}>
+          <View
+            style={[
+              styles.catProgressFill,
+              { width: progressWidth as any, backgroundColor: stripColor },
+            ]}
+          />
+        </View>
+
+        {/* Play / Replay button */}
+        <View style={[styles.catPlayBtn, { backgroundColor: stripColor }]}>
+          <Ionicons name={done ? 'refresh' : 'play'} size={11} color="#fff" />
+          <Text style={styles.catPlayText}>{done ? 'REPLAY' : 'PLAY'}</Text>
+        </View>
+
+        {/* Premium badge */}
         {premiumPrice ? <PremiumStarBadge price={premiumPrice} /> : null}
       </Pressable>
     </Animated.View>
@@ -867,7 +907,7 @@ function DifficultyTabs({
   active: DifficultyId;
   onChange: (value: DifficultyId) => void;
 }) {
-  const { C } = useAppTheme();
+  const { C, scheme } = useAppTheme();
 
   return (
     <View style={styles.diffRow}>
@@ -883,10 +923,10 @@ function DifficultyTabs({
               styles.diffBtn,
               {
                 backgroundColor: isActive
-                  ? withAlpha(accent, C.mode === 'dark' ? 0.22 : 0.11)
+                  ? withAlpha(accent, scheme === 'dark' ? 0.22 : 0.11)
                   : C.surface,
                 borderColor: isActive ? accent : C.divider,
-                shadowColor: isActive ? accent : C.shadow || '#000',
+                shadowColor: isActive ? accent : '#000',
               },
               isActive && {
                 transform: [{ translateY: -2 }],
@@ -929,6 +969,7 @@ export default function Levels() {
   const horizontalPadding = 16;
   const usableWidth = width - insets.left - insets.right;
   const cardWidth = (usableWidth - horizontalPadding * 2 - gap * (columns - 1)) / columns;
+  const levelCardWidth = (usableWidth - horizontalPadding * 2 - 12) / 2;
 
   const isCompleted = (categoryId: string, wordsLength: number, level: number) => {
     const found = state.progress[makeProgressKey(categoryId, difficulty, level)] ?? 0;
@@ -1095,7 +1136,12 @@ export default function Levels() {
                 const found = state.progress[makeProgressKey(selectedCategory.id, difficulty, level)] ?? 0;
                 const completed = found >= need;
                 const unlocked = isUnlocked(selectedCategory.id, baseCategory.words.length, level);
-                const progressWidth = need ? `${Math.min(100, (found / need) * 100)}%` : '0%';
+                const progressPct = need > 0 ? Math.min(1, found / need) : 0;
+                const stars = completed ? 3 : progressPct >= 0.66 ? 2 : progressPct > 0 ? 1 : 0;
+
+                const badgeBg = completed ? Theme.success : unlocked ? Theme.primary : 'transparent';
+                const cardBorderColor = completed ? 'rgba(76,195,138,0.45)' : unlocked ? C.divider : C.divider;
+                const cardBg = completed ? 'rgba(76,195,138,0.08)' : C.surface;
 
                 return (
                   <Pressable
@@ -1106,47 +1152,62 @@ export default function Levels() {
                         `/game?id=${selectedCategory.baseId}&categoryKey=${selectedCategory.id}&title=${encodeURIComponent(selectedCategory.name)}&difficulty=${difficulty}&level=${level}`
                       )
                     }
-                    style={[styles.levelCard, { backgroundColor: C.surface, borderColor: C.divider }, completed && styles.levelCardDone, !unlocked && styles.levelCardLocked]}
+                    style={[
+                      styles.levelCard,
+                      { width: levelCardWidth, backgroundColor: cardBg, borderColor: cardBorderColor },
+                      !unlocked && styles.levelCardLocked,
+                    ]}
                   >
-                    <View style={styles.levelCardTop}>
-                      <View style={[styles.levelNumberCircle, { backgroundColor: C.primary || '#D94F2B', borderColor: withAlpha(C.primary || '#D94F2B', 0.35) }]}>
-                        <Text style={styles.levelNumber}>{level}</Text>
-                      </View>
-
-                      <View style={[styles.levelStatusPill, { backgroundColor: completed ? withAlpha(C.success || '#4CC38A', 0.14) : unlocked ? withAlpha(C.primary || '#D94F2B', 0.12) : withAlpha(C.muted || '#8A8480', 0.14), borderColor: completed ? withAlpha(C.success || '#4CC38A', 0.30) : unlocked ? withAlpha(C.primary || '#D94F2B', 0.28) : C.divider }]}>
-                        <Text style={[styles.levelStatusText, { color: completed ? C.success || '#4CC38A' : unlocked ? C.primary || '#D94F2B' : C.muted }]}>
-                          {completed ? 'DONE' : unlocked ? 'PLAY' : 'LOCK'}
-                        </Text>
-                      </View>
+                    {/* Stars */}
+                    <View style={styles.lcStarsRow}>
+                      {[1, 2, 3].map((s) => (
+                        <Ionicons
+                          key={s}
+                          name={s <= stars ? 'star' : 'star-outline'}
+                          size={14}
+                          color={s <= stars ? Theme.warn : C.muted}
+                        />
+                      ))}
                     </View>
 
-                    <Text style={[styles.levelCardTitle, { color: C.ink }]}>Level {level}</Text>
-                    <Text style={[styles.levelCardMeta, { color: C.muted }]}>Grid {grid}×{grid} • {need} words</Text>
-
-                    <View style={styles.levelProgressTrack}>
-                      <View style={[styles.levelProgressFill, { width: progressWidth as any, backgroundColor: C.success || '#4CC38A' }]} />
+                    {/* Level badge */}
+                    <View style={[styles.lcBadge, { backgroundColor: badgeBg, borderColor: completed ? Theme.success : unlocked ? Theme.primary : C.divider }]}>
+                      {unlocked ? (
+                        completed ? (
+                          <Ionicons name="checkmark" size={26} color="#fff" />
+                        ) : (
+                          <Text style={styles.lcBadgeNum}>{level}</Text>
+                        )
+                      ) : (
+                        <Ionicons name="lock-closed" size={22} color={C.muted} />
+                      )}
                     </View>
 
-                    <Text style={[styles.levelFoundText, { color: C.muted }]}>{Math.min(found, need)}/{need} found</Text>
+                    {/* Title + meta */}
+                    <Text style={[styles.lcTitle, { color: C.ink }]}>Level {level}</Text>
+                    <Text style={[styles.lcMeta, { color: C.muted }]}>{grid}×{grid} · {need} words</Text>
 
+                    {/* Progress bar */}
+                    <View style={[styles.lcTrack, { backgroundColor: C.divider }]}>
+                      <View style={[styles.lcFill, { width: `${progressPct * 100}%` as any, backgroundColor: completed ? Theme.success : Theme.primary }]} />
+                    </View>
+                    <Text style={[styles.lcCount, { color: C.muted }]}>{Math.min(found, need)}/{need} found</Text>
+
+                    {/* Action buttons */}
                     {unlocked && (
-                      <View style={styles.levelActionRow}>
-                        <View style={[styles.levelMiniBtn, { backgroundColor: C.primary || '#D94F2B' }]}>
-                          <Text style={styles.levelMiniBtnText}>PLAY</Text>
+                      <View style={styles.lcActions}>
+                        <View style={[styles.lcPlayBtn, { backgroundColor: completed ? Theme.success : Theme.primary }]}>
+                          <Ionicons name={completed ? 'refresh' : 'play'} size={12} color="#fff" />
+                          <Text style={styles.lcPlayText}>{completed ? 'REPLAY' : 'PLAY'}</Text>
                         </View>
                         <Pressable
-                          onPress={(event) => {
-                            event.stopPropagation();
-                            router.push(
-                              `/battle?id=${selectedCategory.baseId}&categoryKey=${selectedCategory.id}&title=${encodeURIComponent(selectedCategory.name)}&difficulty=${difficulty}&level=${level}`
-                            );
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            router.push(`/battle?id=${selectedCategory.baseId}&categoryKey=${selectedCategory.id}&title=${encodeURIComponent(selectedCategory.name)}&difficulty=${difficulty}&level=${level}`);
                           }}
-                          style={[styles.levelMiniBtn, styles.levelBattleBtn, { backgroundColor: C.warning || '#FFD23F' }]}
+                          style={styles.lcBattleBtn}
                         >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Ionicons name="flash" size={12} color="#0D0500" />
-                            <Text style={[styles.levelMiniBtnText, { color: '#0D0500' }]}>BATTLE</Text>
-                          </View>
+                          <Ionicons name="flash" size={14} color={Theme.warn} />
                         </Pressable>
                       </View>
                     )}
@@ -1300,73 +1361,109 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   categoryCard: {
-    minHeight: 176,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 14,
-    paddingBottom: 13,
-    paddingHorizontal: 9,
-    shadowColor: Theme.primary,
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 5 },
-    shadowRadius: 7,
-    elevation: 5,
     overflow: 'hidden',
+    shadowOpacity: 0.20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 7,
   },
-  progressTop: {
+
+  // Accent top strip
+  catStrip: {
     width: '100%',
+    height: 5,
+    marginBottom: 10,
+  },
+
+  // Icon area with concentric glow rings
+  catIconArea: {
     position: 'relative',
-    marginBottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  progressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(76,195,138,0.2)',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: Theme.success,
-  },
-  progressBadge: {
-    position: 'absolute',
-    right: -4,
-    top: -5,
-    backgroundColor: Theme.success,
-    borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  progressBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '900',
-  },
-  iconWrap: {
-    height: 88,
+  catGlowOuter: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  categoryTitleWrap: {
-    backgroundColor: 'rgba(255,122,0,0.82)',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginTop: 2,
+  catGlowInner: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  categoryTitle: {
-    color: '#fff',
-    fontSize: 14,
+  catDoneCheck: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+  },
+
+  // Name
+  catName: {
+    fontSize: 13,
     fontWeight: '900',
     textAlign: 'center',
-    lineHeight: 18,
-    minHeight: 34,
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+
+  // Stars row
+  catStarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginBottom: 8,
+  },
+  catLevelsText: {
+    fontSize: 9,
+    fontWeight: '800',
+    marginLeft: 5,
+    letterSpacing: 0.3,
+  },
+
+  // Progress bar
+  catProgressTrack: {
+    width: '82%',
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  catProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+
+  // Play button
+  catPlayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    width: '82%',
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  catPlayText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
   },
   premiumBadge: {
     position: 'absolute',
@@ -1430,105 +1527,118 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   levelGrid: {
-    gap: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   levelCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+    alignItems: 'center',
     shadowColor: Theme.primary,
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.12,
     shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    shadowRadius: 10,
     elevation: 4,
   },
-  levelCardTop: {
+  levelCardLocked: {
+    opacity: 0.45,
+  },
+
+  // Stars row
+  lcStarsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 3,
+    alignSelf: 'flex-start',
     marginBottom: 10,
   },
-  levelCardDone: {
-    borderColor: 'rgba(76,195,138,0.4)',
-    backgroundColor: 'rgba(76,195,138,0.1)',
-  },
-  levelCardLocked: {
-    opacity: 0.55,
-  },
-  levelNumberCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Theme.primary,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,150,0,0.35)',
+
+  // Level number badge
+  lcBadge: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    borderWidth: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 10,
+    shadowColor: Theme.primary,
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 6,
+    elevation: 4,
   },
-  levelNumber: {
+  lcBadgeNum: {
     color: '#fff',
     fontWeight: '900',
-    fontSize: 16,
+    fontSize: 24,
   },
-  levelStatusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: 'rgba(76,195,138,0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(76,195,138,0.3)',
-  },
-  levelStatusText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Theme.success,
-  },
-  levelCardTitle: {
-    fontSize: 15,
+
+  // Title & meta
+  lcTitle: {
     fontWeight: '900',
+    fontSize: 13,
     marginBottom: 2,
+    textAlign: 'center',
   },
-  levelCardMeta: {
-    fontSize: 11,
+  lcMeta: {
+    fontSize: 10,
     fontWeight: '700',
-    marginBottom: 10,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  levelProgressTrack: {
-    height: 6,
+
+  // Progress
+  lcTrack: {
+    width: '100%',
+    height: 5,
     borderRadius: 999,
-    backgroundColor: 'rgba(76,195,138,0.2)',
     overflow: 'hidden',
-    marginBottom: 6,
+    marginBottom: 4,
   },
-  levelProgressFill: {
+  lcFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: Theme.success,
   },
-  levelFoundText: {
-    fontSize: 11,
+  lcCount: {
+    fontSize: 9,
     fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  levelActionRow: {
+
+  // Buttons
+  lcActions: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: 6,
+    width: '100%',
   },
-  levelMiniBtn: {
+  lcPlayBtn: {
     flex: 1,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: Theme.primary,
+    height: 32,
+    borderRadius: 10,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
   },
-  levelBattleBtn: {
-    backgroundColor: '#FFD23F',
-  },
-  levelMiniBtnText: {
+  lcPlayText: {
     color: '#fff',
     fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
+  },
+  lcBattleBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,210,63,0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,210,63,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

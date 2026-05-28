@@ -5,6 +5,7 @@ import {
   Alert,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   View,
@@ -16,12 +17,13 @@ import { useAppTheme } from '../lib/appTheme';
 import { useAppState } from '../lib/storage';
 
 export default function Settings() {
-  const { C } = useAppTheme();
+  const { C, scheme, toggle } = useAppTheme();
   const { state, updateSettings } = useAppState();
   const s = state.settings;
 
   return (
     <View style={[styles.bg, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
           <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
@@ -35,6 +37,17 @@ export default function Settings() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          <SectionHeader icon="color-palette-outline" label="APPEARANCE" />
+
+          <Row
+            icon={scheme === 'dark' ? 'moon' : 'sunny-outline'}
+            iconColor={scheme === 'dark' ? '#8E6BFF' : '#F59E0B'}
+            label="Dark Mode"
+            sub={scheme === 'dark' ? 'Dark theme is active' : 'Light theme is active'}
+            right={<Toggle on={scheme === 'dark'} onChange={() => toggle()} />}
+            onPress={toggle}
+          />
+
           <SectionHeader icon="volume-high-outline" label="AUDIO" />
 
           <View style={{ gap: 6 }}>
@@ -148,10 +161,12 @@ function Row({
 }
 
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  const { C, scheme } = useAppTheme();
+  const offBg = scheme === 'dark' ? C.divider : '#B8B3AE';
   return (
     <Pressable
       onPress={() => onChange(!on)}
-      style={[styles.toggle, { backgroundColor: on ? Theme.primary : 'rgba(255,255,255,0.1)' }]}
+      style={[styles.toggle, { backgroundColor: on ? Theme.primary : offBg }]}
     >
       <View style={[styles.toggleKnob, { left: on ? 21 : 3 }]} />
     </Pressable>

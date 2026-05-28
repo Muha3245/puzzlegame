@@ -2,10 +2,10 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,9 +16,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Theme } from '../constants/theme';
 import { useAppTheme } from '../lib/appTheme';
-import { ensureUserProfile, getMyProfile, logoutOnline, PublicUser } from '../lib/online';
+import { ensureUserProfile, getMyProfile, logoutOnline, PublicUser, updatePhotoURL } from '../lib/online';
 import { supabase } from '../lib/supabase';
 import { useAppState } from '../lib/storage';
+import { PlayerAvatar, FRAME_CONFIGS } from '../components/PlayerAvatar';
+import { pickAndUploadAvatar } from '../lib/uploadPhoto';
 
 type AvatarId =
   | 'game-controller' | 'person' | 'star' | 'rocket' | 'flame'
@@ -39,7 +41,7 @@ function safeAvatar(stored: string): AvatarId {
 }
 
 export default function Profile() {
-  const { C } = useAppTheme();
+  const { C, scheme, toggle } = useAppTheme();
   const { state, updateProfile } = useAppState();
   const [name, setName] = useState(state.profile.name);
   const [onlineProfile, setOnlineProfile] = useState<PublicUser | null>(null);
@@ -48,15 +50,36 @@ export default function Profile() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loadingOnline, setLoadingOnline] = useState(true);
 
-  const pulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.07, duration: 1400, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 1400, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async () => {
+    if (!isLoggedIn) {
+      Alert.alert('Sign in required', 'Please sign in to upload a profile picture.');
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    setUploading(true);
+    try {
+      const url = await pickAndUploadAvatar(uid);
+      if (url) {
+        updateProfile({ photoURL: url });
+        updatePhotoURL(url).catch(() => {});
+      }
+    } catch (err: any) {
+      const msg: string = err?.message ?? 'Something went wrong.';
+      const isBucket = msg.toLowerCase().includes('bucket') || msg.toLowerCase().includes('not found');
+      Alert.alert(
+        'Upload failed',
+        isBucket
+          ? 'Storage not set up yet.\n\nIn your Supabase dashboard go to Storage → New bucket → name it "avatars" → set it to Public.'
+          : msg
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const loadProfileForUser = async (authUser: any) => {
     try {
@@ -123,13 +146,16 @@ export default function Profile() {
 
   return (
     <View style={[styles.bg, { backgroundColor: C.bg }]}>
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
           <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: C.ink }]}>My Profile</Text>
+          <Pressable onPress={toggle} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={20} color={C.ink} />
+          </Pressable>
           <Pressable onPress={() => router.push('/coins')} style={styles.coinPill}>
             <Ionicons name="logo-bitcoin" size={14} color={Theme.warn} />
             <Text style={styles.coinText}>{state.coins}</Text>
@@ -139,11 +165,26 @@ export default function Profile() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* ── Hero card ── */}
           <View style={[styles.heroCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
-            <View style={styles.avatarGlowRing}>
-              <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulse }] }]}>
-                <Ionicons name={avatar} size={48} color={Theme.primary} />
-              </Animated.View>
-            </View>
+            <Pressable onPress={handleUpload} disabled={uploading} style={styles.avatarWrapper}>
+              <PlayerAvatar
+                photoURL={state.profile.photoURL}
+                displayName={onlineProfile?.displayName ?? authDisplayName ?? state.profile.name}
+                avatarIcon={avatar}
+                frameId={state.profile.frameId}
+                size={88}
+              />
+              <View style={[styles.uploadBadge, { backgroundColor: 'rgba(0,0,0,0.52)', borderColor: C.surface }]}>
+                {uploading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="camera" size={16} color="#fff" />}
+              </View>
+            </Pressable>
+            <Pressable onPress={handleUpload} disabled={uploading} style={styles.changePhotoBtn}>
+              <Ionicons name="cloud-upload-outline" size={14} color={Theme.primary} />
+              <Text style={styles.changePhotoText}>
+                {uploading ? 'Uploading…' : state.profile.photoURL ? 'Change Photo' : 'Upload Photo'}
+              </Text>
+            </Pressable>
 
             <Text style={[styles.heroName, { color: C.ink }]}>
               {onlineProfile?.displayName ?? authDisplayName ?? state.profile.name}
@@ -200,6 +241,45 @@ export default function Profile() {
               );
             })}
           </View>
+
+          {/* ── Profile Frame ── */}
+          <SectionLabel text="PROFILE FRAME" />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.frameRow}
+            style={{ marginBottom: 4 }}
+          >
+            {Object.values(FRAME_CONFIGS).map((frame) => {
+              const selected = (state.profile.frameId ?? 'none') === frame.id;
+              return (
+                <Pressable
+                  key={frame.id}
+                  onPress={() => updateProfile({ frameId: frame.id })}
+                  style={[
+                    styles.frameCard,
+                    selected
+                      ? { borderColor: Theme.primary, backgroundColor: 'rgba(255,122,0,0.08)' }
+                      : { borderColor: C.divider, backgroundColor: C.surface },
+                  ]}
+                >
+                  <PlayerAvatar
+                    photoURL={state.profile.photoURL}
+                    displayName={onlineProfile?.displayName ?? state.profile.name}
+                    avatarIcon={avatar}
+                    frameId={frame.id}
+                    size={44}
+                  />
+                  <Text style={[styles.frameCardName, { color: selected ? Theme.primary : C.ink }]}>
+                    {frame.label}
+                  </Text>
+                  <Text style={[styles.frameCardSub, { color: frame.id === 'none' ? C.muted : frame.ringColor }]}>
+                    {frame.subtitle}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
           {/* ── Player name ── */}
           <SectionLabel text="PLAYER NAME" />
@@ -337,4 +417,16 @@ const styles = StyleSheet.create({
 
   loginBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12, minHeight: 50, borderRadius: 18, backgroundColor: 'rgba(255,120,0,0.14)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.30)' },
   loginBtnText: { color: Theme.primary, fontSize: 15, fontWeight: '900' },
+
+  // Avatar upload
+  avatarWrapper: { alignSelf: 'center', width: 122, height: 122, position: 'relative', marginBottom: 6 },
+  uploadBadge: { position: 'absolute', bottom: 6, right: 6, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, zIndex: 10 },
+  changePhotoBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, backgroundColor: 'rgba(255,122,0,0.12)', borderWidth: 1, borderColor: 'rgba(255,122,0,0.30)', marginBottom: 10 },
+  changePhotoText: { color: Theme.primary, fontSize: 12, fontWeight: '800' },
+
+  // Frame picker
+  frameRow: { gap: 8, paddingVertical: 4, paddingHorizontal: 2 },
+  frameCard: { width: 78, alignItems: 'center', gap: 4, paddingBottom: 10, paddingTop: 4, borderRadius: 16, borderWidth: 1.5 },
+  frameCardName: { fontSize: 11, fontWeight: '900', textAlign: 'center' },
+  frameCardSub: { fontSize: 9, fontWeight: '700', textAlign: 'center', letterSpacing: 0.3 },
 });

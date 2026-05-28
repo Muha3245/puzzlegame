@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { ScreenShell } from '../components/ScreenShell';
 import { useAppTheme } from '../lib/appTheme';
-import { playDrawSound, playGameSound, playLoseSound, playWinSound } from '../lib/audio';
+import { playDrawSound, playLoseSound, playXoxMove, playXoxWin } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 
 type Mark = 'X' | 'O' | null;
@@ -349,10 +349,10 @@ export default function Xox() {
 
     if (result.winner === 'X') {
       setScores((s) => ({ ...s, x: s.x + 1 }));
-      playWinSound(state.settings.sound).catch(() => {});
+      playXoxWin(state.settings.sound).catch(() => {});
     } else if (result.winner === 'O') {
       setScores((s) => ({ ...s, o: s.o + 1 }));
-      (mode === 'bot' ? playLoseSound : playWinSound)(state.settings.sound).catch(() => {});
+      (mode === 'bot' ? playLoseSound : playXoxWin)(state.settings.sound).catch(() => {});
     } else {
       setScores((s) => ({ ...s, draw: s.draw + 1 }));
       playDrawSound(state.settings.sound).catch(() => {});
@@ -373,7 +373,7 @@ export default function Xox() {
       });
 
       setTurn('X');
-      playGameSound('tap', state.settings.sound).catch(() => {});
+      playXoxMove(state.settings.sound).catch(() => {});
     }, 520);
 
     return () => clearTimeout(timer);
@@ -388,7 +388,7 @@ export default function Xox() {
 
     setBoard(next);
     setTurn(turn === 'X' ? 'O' : 'X');
-    playGameSound('tap', state.settings.sound).catch(() => {});
+    playXoxMove(state.settings.sound).catch(() => {});
   };
 
   const isBotThinking = mode === 'bot' && turn === 'O' && !result.winner;
