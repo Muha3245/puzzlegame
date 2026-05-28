@@ -1,92 +1,128 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
-import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedPressable } from '../components/AnimatedPressable';
-import { ScreenShell } from '../components/ScreenShell';
+import { useAppTheme } from '../lib/appTheme';
 import { useAppState } from '../lib/storage';
 
-function QuickAction({ icon, label, subtitle, onPress }: any) {
+function greeting() {
+  const h = new Date().getHours();
+
+  if (h < 12) return 'Good morning,';
+  if (h < 17) return 'Good afternoon,';
+
+  return 'Good evening,';
+}
+
+function issueNumber() {
   return (
-    <AnimatedPressable style={styles.quickItem} onPress={onPress}>
-      <View style={styles.quickIconWrap}>
-        <Ionicons name={icon} size={21} color="#fff" />
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <Text style={styles.quickLabel}>{label}</Text>
-        <Text style={styles.quickSubtitle}>{subtitle}</Text>
-      </View>
-
-      <Ionicons name="chevron-forward" size={17} color="rgba(255,255,255,0.45)" />
-    </AnimatedPressable>
+    Math.floor(
+      (Date.now() - new Date('2024-01-01').getTime()) / 86400000
+    ) + 1
   );
 }
 
-function ModeCard({
+function dateLabel() {
+  const d = new Date();
+
+  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const months = [
+    'JAN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AUG',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DEC',
+  ];
+
+  return `${days[d.getDay()]} · ${months[d.getMonth()]} ${d.getDate()}`;
+}
+
+function ModeItem({
+  num,
+  icon,
+  badge,
+  badgeColor,
+  dot,
+  meta,
   title,
   subtitle,
-  icon,
-  color,
-  lightColor,
-  badge,
   onPress,
   delay = 0,
-}: any) {
-  const y = useRef(new Animated.Value(24)).current;
+}: {
+  num: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  badge: string;
+  badgeColor: string;
+  dot?: boolean;
+  meta: string;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+  delay?: number;
+}) {
+  const { C } = useAppTheme();
+
   const op = useRef(new Animated.Value(0)).current;
+  const tx = useRef(new Animated.Value(12)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(op, {
         toValue: 1,
-        duration: 430,
+        duration: 360,
         delay,
         useNativeDriver: true,
       }),
-      Animated.spring(y, {
+      Animated.timing(tx, {
         toValue: 0,
-        friction: 7,
-        tension: 55,
+        duration: 360,
         delay,
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [op, tx, delay]);
 
   return (
-    <Animated.View style={{ opacity: op, transform: [{ translateY: y }] }}>
-      <AnimatedPressable
-        style={[
-          styles.modeCard,
-          {
-            backgroundColor: color,
-            shadowColor: color,
-          },
-        ]}
-        onPress={onPress}
-      >
-        <View style={styles.modeCircleTop} />
-        <View style={styles.modeCircleBottom} />
+    <Animated.View style={{ opacity: op, transform: [{ translateX: tx }] }}>
+      <AnimatedPressable style={styles.modeRow} onPress={onPress}>
+        <Text style={[styles.modeNum, { color: C.divider }]}>{num}</Text>
 
-        <View style={styles.modeLeft}>
-          <View style={[styles.modeIconBox, { backgroundColor: lightColor }]}>
-            <Ionicons name={icon} size={34} color="#fff" />
-          </View>
+        <View style={[styles.modeIcon, { backgroundColor: C.ink }]}>
+          <Ionicons name={icon} size={22} color={C.bg} />
+        </View>
 
-          <View style={styles.modeTextArea}>
-            <View style={styles.modeBadge}>
-              <Text style={styles.modeBadgeText}>{badge}</Text>
+        <View style={styles.modeContent}>
+          <View style={styles.metaRow}>
+            <View style={[styles.badge, { backgroundColor: badgeColor }]}>
+              {dot && <View style={styles.liveDot} />}
+              <Text style={styles.badgeText}>{badge}</Text>
             </View>
 
-            <Text style={styles.modeTitle}>{title}</Text>
-            <Text style={styles.modeSubtitle}>{subtitle}</Text>
-
-            <View style={styles.startRow}>
-              <Text style={styles.startText}>Start playing</Text>
-              <Ionicons name="arrow-forward-circle" size={20} color="#fff" />
-            </View>
+            <Text style={[styles.metaText, { color: C.muted }]}>{meta}</Text>
           </View>
+
+          <Text style={[styles.modeTitle, { color: C.ink }]}>{title}</Text>
+          <Text style={[styles.modeSub, { color: C.muted }]}>{subtitle}</Text>
+        </View>
+
+        <View style={[styles.arrowCircle, { backgroundColor: C.ink }]}>
+          <Ionicons name="arrow-forward" size={14} color={C.bg} />
         </View>
       </AnimatedPressable>
     </Animated.View>
@@ -95,479 +131,454 @@ function ModeCard({
 
 export default function Home() {
   const { state } = useAppState();
+  const insets = useSafeAreaInsets();
+  const { C, scheme, toggle } = useAppTheme();
 
   return (
-    <ScreenShell
-      title="Puzzle Arena"
-      subtitle="Offline fun and live Word Search battles"
-      showBack={false}
-    >
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topPanel}>
-          <View style={styles.profileRow}>
-            <View style={styles.profileLeft}>
-              <View style={styles.avatar}>
-                <Ionicons name="person" size={23} color="#fff" />
-              </View>
+    <View style={[styles.safe, { backgroundColor: C.bg }]}>
+      <StatusBar
+        barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={C.bg}
+      />
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.hello} numberOfLines={1}>
-                  Hi, {state.profile.name}
-                </Text>
-                <Text style={styles.meta}>Ready for your next puzzle?</Text>
-              </View>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top,
+            paddingBottom: 24,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Top bar */}
+        <View style={styles.topBar}>
+          <View style={styles.brand}>
+            <View style={[styles.brandIcon, { backgroundColor: C.ink }]}>
+              <Ionicons name="sparkles" size={13} color={C.bg} />
             </View>
 
-            <AnimatedPressable style={styles.coinPill} onPress={() => router.push('/coins')}>
-              <View style={styles.coinIcon}>
-                <Ionicons name="logo-bitcoin" size={15} color="#2A1B00" />
-              </View>
-              <Text style={styles.coinText}>{state.coins}</Text>
-            </AnimatedPressable>
+            <Text style={[styles.brandText, { color: C.ink }]}>
+              PUZZLE ARENA
+            </Text>
           </View>
 
-          <View style={styles.quickPanel}>
-            <View style={styles.quickHeader}>
-              <Text style={styles.quickTitle}>Quick Access</Text>
-              <Text style={styles.quickHint}>Manage your game faster</Text>
-            </View>
-
-            <View style={styles.quickGrid}>
-              <QuickAction
-                icon="person"
-                label="Profile"
-                subtitle="Player info"
-                onPress={() => router.push('/profile')}
+          <View style={styles.topRight}>
+            <AnimatedPressable
+              style={[
+                styles.bellBtn,
+                {
+                  backgroundColor: C.surface,
+                  borderColor: C.divider,
+                },
+              ]}
+              onPress={toggle}
+            >
+              <Ionicons
+                name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
+                size={18}
+                color={C.ink}
               />
+            </AnimatedPressable>
 
-              <QuickAction
-                icon="settings"
-                label="Settings"
-                subtitle="Game setup"
-                onPress={() => router.push('/settings')}
-              />
+            <AnimatedPressable
+              style={[
+                styles.bellBtn,
+                {
+                  backgroundColor: C.surface,
+                  borderColor: C.divider,
+                },
+              ]}
+              onPress={() => router.push('/friends')}
+            >
+              <Ionicons name="notifications" size={18} color={C.ink} />
+              <View style={styles.bellDot} />
+            </AnimatedPressable>
 
-              <QuickAction
-                icon="trophy"
-                label="Ranks"
-                subtitle="Leaderboard"
-                onPress={() => router.push('/leaderboard')}
-              />
-            </View>
+            <AnimatedPressable
+              style={[styles.coinPill, { backgroundColor: C.ink }]}
+              onPress={() => router.push('/coins')}
+            >
+              <View style={styles.coinCircle}>
+                <Ionicons name="logo-bitcoin" size={11} color="#1C1C1E" />
+              </View>
+
+              <Text style={styles.coinText}>
+                {state.coins.toLocaleString()}
+              </Text>
+            </AnimatedPressable>
           </View>
         </View>
 
-        <View style={styles.heroCard}>
-          <View style={styles.heroGlowOne} />
-          <View style={styles.heroGlowTwo} />
+        {/* Date / issue */}
+        <Text style={[styles.dateLine, { color: C.muted }]}>
+          {dateLabel()} · ISSUE {issueNumber()}
+        </Text>
 
-          <View style={styles.heroBadge}>
-            <Ionicons name="sparkles" size={14} color="#FFD23F" />
-            <Text style={styles.heroBadgeText}>Brain Challenge</Text>
-          </View>
+        {/* Greeting */}
+        <View style={styles.greetBlock}>
+          <Text style={[styles.greetLine, { color: C.ink }]}>
+            {greeting()}
+          </Text>
 
-          <Text style={styles.heroTitle}>Play smarter. Compete faster.</Text>
-          <Text style={styles.heroSubtitle}>
-            Choose offline games for practice or enter online battle mode for real-time word
-            search challenges.
+          <Text style={[styles.greetName, { color: C.ink }]}>
+            {state.profile.name}.
           </Text>
         </View>
 
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Choose Game Mode</Text>
-          <Text style={styles.sectionSubtitle}>Select how you want to play today</Text>
+        {/* Stats */}
+        <View style={[styles.statsRow, { borderColor: C.divider }]}>
+          <View style={styles.statCell}>
+            <Text style={[styles.statNum, { color: C.primary || '#D94F2B' }]}>
+              7
+            </Text>
+            <Text style={[styles.statLabel, { color: C.muted }]}>
+              DAY STREAK
+            </Text>
+          </View>
+
+          <View
+            style={[styles.statDivider, { backgroundColor: C.divider }]}
+          />
+
+          <View style={styles.statCell}>
+            <Text style={[styles.statNum, { color: C.ink }]}>14</Text>
+            <Text style={[styles.statLabel, { color: C.muted }]}>
+              WINS THIS WK
+            </Text>
+          </View>
+
+          <View
+            style={[styles.statDivider, { backgroundColor: C.divider }]}
+          />
+
+          <View style={styles.statCell}>
+            <Text style={[styles.statNum, { color: C.ink }]}>#</Text>
+            <Text style={[styles.statLabel, { color: C.muted }]}>
+              GLOBAL RANK
+            </Text>
+          </View>
         </View>
 
-        <ModeCard
-          title="Offline Games"
-          subtitle="Play Word Search, XOX, bot mode and same-phone multiplayer without internet."
+        {/* Section header */}
+        <View style={styles.sectionBar}>
+          <Text style={[styles.sectionLabel, { color: C.muted }]}>
+            # GAME MODES
+          </Text>
+
+          <AnimatedPressable onPress={() => {}}>
+            <Text style={[styles.sectionAll, { color: C.ink }]}>
+              All {'>'}
+            </Text>
+          </AnimatedPressable>
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: C.divider }]} />
+
+        {/* Mode list */}
+        <ModeItem
+          num="01"
           icon="game-controller"
-          badge="Practice Mode"
-          color="#2FBF7A"
-          lightColor="rgba(255,255,255,0.18)"
+          badge="PRACTICE"
+          badgeColor="#7AC943"
+          meta="12 levels"
+          title="Offline"
+          subtitle="Word Search, XOX, bot — your training ground."
           onPress={() => router.push('/offline' as any)}
         />
 
-        <ModeCard
-          title="Online Battle"
-          subtitle="Join live rooms and challenge another player in real-time Word Search battles."
+        <View style={[styles.divider, { backgroundColor: C.divider }]} />
+
+        <ModeItem
+          num="02"
           icon="flash"
-          badge="Live Match"
-          color="#FF7A1A"
-          lightColor="rgba(255,255,255,0.18)"
+          badge="LIVE"
+          badgeColor="#E5452A"
+          dot
+          meta="4 queued"
+          title="Word Battle"
+          subtitle="Live 1v1 word hunt. Faster pen, faster win."
           onPress={() => router.push('/battle')}
           delay={90}
         />
 
-        <View style={styles.infoCard}>
-          <View style={styles.infoIcon}>
-            <Ionicons name="bulb" size={21} color="#FFD23F" />
-          </View>
+        <View style={[styles.divider, { backgroundColor: C.divider }]} />
 
-          <View style={{ flex: 1 }}>
-            <Text style={styles.infoTitle}>Pro Tip</Text>
-            <Text style={styles.infoText}>
-              Play battles to improve your ranking, collect more coins and become a better puzzle
-              solver.
-            </Text>
-          </View>
-        </View>
+        <ModeItem
+          num="03"
+          icon="grid"
+          badge="LIVE"
+          badgeColor="#8E6BFF"
+          dot
+          meta="127 online"
+          title="XOX Online"
+          subtitle="Tic-tac-toe with elo, friends, and trash talk."
+          onPress={() => router.push('/xox-battle' as any)}
+          delay={180}
+        />
+
+        <View style={[styles.divider, { backgroundColor: C.divider }]} />
       </ScrollView>
-    </ScreenShell>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+
+  scroll: {
+    flex: 1,
+  },
+
   content: {
-    padding: 18,
-    paddingBottom: 34,
-    gap: 16,
+    flexGrow: 1,
   },
 
-  topPanel: {
-    gap: 14,
-  },
-
-  profileRow: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
 
-  profileLeft: {
-    flex: 1,
+  brand: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
 
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
+  brandIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
   },
 
-  hello: {
-    color: '#fff',
-    fontSize: 21,
-    fontWeight: '900',
-  },
-
-  meta: {
-    color: 'rgba(255,255,255,0.60)',
+  brandText: {
     fontSize: 13,
-    fontWeight: '700',
-    marginTop: 2,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+  },
+
+  topRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  bellBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+
+  bellDot: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#E5452A',
+    borderWidth: 1.5,
+    borderColor: '#fff',
   },
 
   coinPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 11,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.13)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
   },
 
-  coinIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 999,
+  coinCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFD23F',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFD23F',
   },
 
   coinText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
   },
 
-  quickPanel: {
-    padding: 15,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-
-  quickHeader: {
-    marginBottom: 12,
-  },
-
-  quickTitle: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '900',
-  },
-
-  quickHint: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
+  dateLine: {
+    paddingHorizontal: 20,
+    marginTop: 8,
+    fontSize: 11,
     fontWeight: '700',
-    marginTop: 2,
+    letterSpacing: 0.8,
   },
 
-  quickGrid: {
-    gap: 10,
+  greetBlock: {
+    paddingHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 18,
   },
 
-  quickItem: {
-    minHeight: 64,
-    borderRadius: 22,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  greetLine: {
+    fontSize: 34,
+    fontWeight: '800',
+    lineHeight: 40,
+  },
+
+  greetName: {
+    fontSize: 38,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    lineHeight: 44,
+  },
+
+  statsRow: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 18,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    paddingVertical: 14,
+  },
+
+  statCell: {
+    flex: 1,
+    paddingHorizontal: 6,
+  },
+
+  statNum: {
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 30,
+  },
+
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginTop: 3,
+  },
+
+  statDivider: {
+    width: 1,
+    marginVertical: 2,
+  },
+
+  sectionBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.11)',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 10,
   },
 
-  quickIconWrap: {
-    width: 42,
-    height: 42,
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+
+  sectionAll: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  divider: {
+    height: 1,
+    marginHorizontal: 20,
+  },
+
+  modeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    gap: 14,
+  },
+
+  modeNum: {
+    fontSize: 22,
+    fontWeight: '900',
+    width: 28,
+  },
+
+  modeIcon: {
+    width: 52,
+    height: 52,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
   },
 
-  quickLabel: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  quickSubtitle: {
-    color: 'rgba(255,255,255,0.52)',
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-
-  heroCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    minHeight: 190,
-    borderRadius: 32,
-    padding: 20,
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-
-  heroGlowOne: {
-    position: 'absolute',
-    width: 170,
-    height: 170,
-    borderRadius: 999,
-    right: -60,
-    top: -60,
-    backgroundColor: 'rgba(47,191,122,0.32)',
-  },
-
-  heroGlowTwo: {
-    position: 'absolute',
-    width: 145,
-    height: 145,
-    borderRadius: 999,
-    left: -55,
-    bottom: -60,
-    backgroundColor: 'rgba(255,122,26,0.25)',
-  },
-
-  heroBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,210,63,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,210,63,0.18)',
-  },
-
-  heroBadgeText: {
-    color: '#FFD23F',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-
-  heroTitle: {
-    color: '#fff',
-    fontSize: 29,
-    fontWeight: '900',
-    lineHeight: 35,
-    marginTop: 14,
-    maxWidth: '92%',
-  },
-
-  heroSubtitle: {
-    color: 'rgba(255,255,255,0.68)',
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
-    marginTop: 8,
-    maxWidth: '95%',
-  },
-
-  sectionHead: {
-    marginTop: 2,
-  },
-
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 19,
-    fontWeight: '900',
-  },
-
-  sectionSubtitle: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 3,
-  },
-
-  modeCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    minHeight: 172,
-    borderRadius: 34,
-    padding: 20,
-    justifyContent: 'center',
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
-  },
-
-  modeCircleTop: {
-    position: 'absolute',
-    width: 130,
-    height: 130,
-    borderRadius: 999,
-    top: -45,
-    right: -35,
-    backgroundColor: 'rgba(255,255,255,0.13)',
-  },
-
-  modeCircleBottom: {
-    position: 'absolute',
-    width: 92,
-    height: 92,
-    borderRadius: 999,
-    bottom: -35,
-    right: 45,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-
-  modeLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-
-  modeIconBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 27,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-
-  modeTextArea: {
+  modeContent: {
     flex: 1,
   },
 
-  modeBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.17)',
-    marginBottom: 8,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 5,
   },
 
-  modeBadgeText: {
-    color: '#fff',
-    fontSize: 11,
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+
+  liveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+  },
+
+  badgeText: {
+    fontSize: 9,
     fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.4,
+  },
+
+  metaText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 
   modeTitle: {
-    color: '#fff',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
+    lineHeight: 24,
   },
 
-  modeSubtitle: {
-    color: 'rgba(255,255,255,0.80)',
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 19,
-    marginTop: 6,
+  modeSub: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 17,
+    marginTop: 2,
   },
 
-  startRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    marginTop: 13,
-  },
-
-  startText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-
-  infoCard: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 15,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.13)',
-  },
-
-  infoIcon: {
-    width: 44,
-    height: 44,
+  arrowCircle: {
+    width: 34,
+    height: 34,
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,210,63,0.12)',
-  },
-
-  infoTitle: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  infoText: {
-    color: 'rgba(255,255,255,0.64)',
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 18,
-    marginTop: 3,
   },
 });

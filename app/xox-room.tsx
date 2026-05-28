@@ -1,23 +1,28 @@
 // app/xox-room.tsx
 // Real-time online XOX game room.
 // Player 1 (challenger) = X  |  Player 2 (challenged) = O
-// Moves sync via Supabase Broadcast (instant) + postgres_changes (fallback/reconnect).
 
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 import {
+  BattleChatMessage,
   createXoxRoom,
   getCurrentUserId,
   getXoxRoom,
@@ -25,6 +30,7 @@ import {
   PublicUser,
   rejectXoxRoom,
   subscribeToXoxBroadcast,
+  subscribeToXoxChat,
   subscribeToXoxRoom,
   XoxMoveBroadcast,
   XoxRoom,
@@ -34,7 +40,9 @@ import { useAppState } from '../lib/storage';
 
 type Mark = 'X' | 'O' | null;
 
-// ── Shared game-logic utilities ───────────────────────────────────────────────
+const EXIT_COIN_PENALTY = 15;
+
+// ── Game-logic utilities ──────────────────────────────────────────────────────
 
 function getWins(n: number): number[][] {
   const wins: number[][] = [];
@@ -59,6 +67,14 @@ function checkWinner(
   return { winner: null, line: [] };
 }
 
+function fmtChatTime(ts?: number) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
 // ── Board cell ────────────────────────────────────────────────────────────────
 
 function XoxCell({
@@ -78,12 +94,7 @@ function XoxCell({
 
   useEffect(() => {
     if (value) {
-      Animated.spring(scale, {
-        toValue: 1,
-        friction: 3,
-        tension: 280,
-        useNativeDriver: true,
-      }).start();
+      Animated.spring(scale, { toValue: 1, friction: 3, tension: 280, useNativeDriver: true }).start();
     } else {
       scale.setValue(0);
     }
@@ -100,18 +111,10 @@ function XoxCell({
     >
       <Animated.View style={{ transform: [{ scale }] }}>
         {value === 'X' && (
-          <Ionicons
-            name="close-sharp"
-            size={ix}
-            color={isWinCell ? '#FF3D00' : '#FF7A00'}
-          />
+          <Ionicons name="close-sharp" size={ix} color={isWinCell ? '#FF3D00' : '#FF7A00'} />
         )}
         {value === 'O' && (
-          <Ionicons
-            name="ellipse-outline"
-            size={io}
-            color={isWinCell ? '#00C853' : '#4CC38A'}
-          />
+          <Ionicons name="ellipse-outline" size={io} color={isWinCell ? '#00C853' : '#4CC38A'} />
         )}
       </Animated.View>
     </Pressable>
@@ -122,8 +125,8 @@ function XoxCell({
 
 export default function XoxRoomScreen() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
-  const { state }  = useAppState();
-  const { width }  = useWindowDimensions();
+  const { state, addCoins } = useAppState();
+  const { width } = useWindowDimensions();
 
   const [room,        setRoom]        = useState<XoxRoom | null>(null);
   const [board,       setBoard]       = useState<Mark[]>([]);
@@ -133,6 +136,15 @@ export default function XoxRoomScreen() {
   const [myUid,       setMyUid]       = useState<string | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [makingMove,  setMakingMove]  = useState(false);
+
+  // Chat state
+  const [chatOpen,       setChatOpen]       = useState(false);
+  const [chatText,       setChatText]       = useState('');
+  const [chatMessages,   setChatMessages]   = useState<BattleChatMessage[]>([]);
+  const [unreadCount,    setUnreadCount]    = useState(0);
+  const chatScrollRef  = useRef<ScrollView | null>(null);
+  const chatOpenRef    = useRef(false);
+  const sendXoxChatRef = useRef<((m: BattleChatMessage) => void) | null>(null);
 
   const broadcastRef  = useRef<{ send: (d: XoxMoveBroadcast) => void; cleanup: () => void } | null>(null);
   const soundPlayedRef = useRef(false);
@@ -150,6 +162,11 @@ export default function XoxRoomScreen() {
     if (!room || !myUid) return 'Opponent';
     return room.player1Id === myUid ? room.player2Name : room.player1Name;
   }, [room, myUid]);
+
+  const myName = useMemo(() => {
+    if (!room || !myUid) return state.profile.name;
+    return room.player1Id === myUid ? room.player1Name : room.player2Name;
+  }, [room, myUid, state.profile.name]);
 
   const isMyTurn = useMemo(
     () => !!myMark && !winner && room?.status === 'in_progress' && currentTurn === myMark,
@@ -181,7 +198,6 @@ export default function XoxRoomScreen() {
         const uid = await getCurrentUserId();
         if (!mounted) return;
         setMyUid(uid);
-
         if (!roomId) return;
         const r = await getXoxRoom(roomId);
         if (!mounted || !r) return;
@@ -195,7 +211,7 @@ export default function XoxRoomScreen() {
     return () => { mounted = false; };
   }, [roomId]);
 
-  // ── postgres_changes — room updates (status, board, winner) ───────────────
+  // ── postgres_changes — room updates ───────────────────────────────────────
 
   useEffect(() => {
     if (!roomId) return;
@@ -219,6 +235,35 @@ export default function XoxRoomScreen() {
     broadcastRef.current = channel;
     return channel.cleanup;
   }, [roomId]);
+
+  // ── Chat broadcast subscription ────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!roomId) return;
+    const chatChannel = subscribeToXoxChat(roomId, (msg) => {
+      setChatMessages((prev) => [...prev.slice(-29), msg]);
+      if (!chatOpenRef.current) {
+        setUnreadCount((c) => Math.min(c + 1, 99));
+      } else {
+        requestAnimationFrame(() => chatScrollRef.current?.scrollToEnd({ animated: true }));
+      }
+    });
+    sendXoxChatRef.current = chatChannel.send;
+    return () => {
+      chatChannel.cleanup();
+      sendXoxChatRef.current = null;
+    };
+  }, [roomId]);
+
+  // ── Sync chatOpen ref ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    chatOpenRef.current = chatOpen;
+    if (chatOpen) {
+      setUnreadCount(0);
+      requestAnimationFrame(() => chatScrollRef.current?.scrollToEnd({ animated: true }));
+    }
+  }, [chatOpen, chatMessages.length]);
 
   // ── Sound when game ends ───────────────────────────────────────────────────
 
@@ -246,10 +291,9 @@ export default function XoxRoomScreen() {
     const result    = checkWinner(newBoard, wins);
     const nextTurn: 'X' | 'O' = myMark === 'X' ? 'O' : 'X';
     const winnerId  = result.winner === 'X' ? room.player1Id
-      : result.winner === 'O'   ? room.player2Id
+      : result.winner === 'O' ? room.player2Id
       : null;
 
-    // Optimistic local update
     setBoard(newBoard);
     setCurrentTurn(nextTurn);
     if (result.winner) {
@@ -259,7 +303,6 @@ export default function XoxRoomScreen() {
 
     playGameSound('tap', state.settings.sound).catch(() => {});
 
-    // Instant broadcast to opponent
     broadcastRef.current?.send({
       index,
       mark: myMark,
@@ -269,7 +312,6 @@ export default function XoxRoomScreen() {
       winnerId,
     });
 
-    // Persist to DB
     setMakingMove(true);
     try {
       await makeXoxMove({
@@ -286,19 +328,43 @@ export default function XoxRoomScreen() {
     }
   };
 
+  // ── Send chat message ──────────────────────────────────────────────────────
+
+  const sendChatMessage = useCallback(() => {
+    if (!myUid || !sendXoxChatRef.current) return;
+    const text = chatText.trim().slice(0, 140);
+    if (!text) return;
+    const msg: BattleChatMessage = {
+      id:          `${myUid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      roomId:      roomId ?? '',
+      userId:      myUid,
+      displayName: myName,
+      text,
+      createdAt:   Date.now(),
+    };
+    setChatMessages((prev) => [...prev.slice(-29), msg]);
+    setChatText('');
+    requestAnimationFrame(() => chatScrollRef.current?.scrollToEnd({ animated: true }));
+    sendXoxChatRef.current(msg);
+  }, [chatText, myUid, myName, roomId]);
+
   // ── Quit / rematch ─────────────────────────────────────────────────────────
 
   const handleQuit = () => {
+    const isActive = room?.status === 'in_progress' && !winner;
     Alert.alert(
       'Quit Game',
-      'Leave this game? Your opponent wins.',
+      isActive
+        ? `Leave this game? Your opponent wins and you lose ${EXIT_COIN_PENALTY} coins.`
+        : 'Leave this game?',
       [
         { text: 'Stay', style: 'cancel' },
         {
           text: 'Quit',
           style: 'destructive',
           onPress: async () => {
-            if (room && myMark && !winner) {
+            if (isActive && room && myMark) {
+              addCoins(-EXIT_COIN_PENALTY);
               const winnerMark: 'X' | 'O' = myMark === 'X' ? 'O' : 'X';
               const winnerId = myMark === 'X' ? room.player2Id : room.player1Id;
               await makeXoxMove({
@@ -316,9 +382,7 @@ export default function XoxRoomScreen() {
     );
   };
 
-  const handlePlayAgain = () => {
-    router.replace('/xox-battle');
-  };
+  const handlePlayAgain = () => router.replace('/xox-battle');
 
   const handleRematch = async () => {
     if (!room || !myMark) return;
@@ -360,7 +424,7 @@ export default function XoxRoomScreen() {
     );
   }
 
-  // ── Waiting for opponent to accept ─────────────────────────────────────────
+  // ── Waiting for opponent ───────────────────────────────────────────────────
 
   if (room.status === 'pending') {
     return (
@@ -370,7 +434,12 @@ export default function XoxRoomScreen() {
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </Pressable>
           <Text style={styles.headerTitle}>XOX Online</Text>
-          <View style={{ width: 42 }} />
+          <View style={styles.headerRight}>
+            <View style={styles.coinPill}>
+              <Ionicons name="logo-bitcoin" size={13} color="#FFD23F" />
+              <Text style={styles.coinText}>{state.coins}</Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.centered}>
@@ -404,7 +473,22 @@ export default function XoxRoomScreen() {
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </Pressable>
         <Text style={styles.headerTitle}>XOX Online</Text>
-        <View style={{ width: 42 }} />
+        <View style={styles.headerRight}>
+          {/* Chat button */}
+          <Pressable onPress={() => setChatOpen(true)} style={styles.chatBtn}>
+            <Ionicons name="chatbubble-ellipses" size={17} color="#fff" />
+            {unreadCount > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
+          {/* Coin pill */}
+          <Pressable onPress={() => router.push('/coins')} style={styles.coinPill}>
+            <Ionicons name="logo-bitcoin" size={13} color="#FFD23F" />
+            <Text style={styles.coinText}>{state.coins}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Player name strips */}
@@ -482,11 +566,7 @@ export default function XoxRoomScreen() {
 
             <Text style={[
               styles.overlayTitle,
-              {
-                color: winner === 'draw'
-                  ? '#FFD23F'
-                  : winner === myMark ? '#FFD23F' : '#FF4D8D',
-              },
+              { color: winner === 'draw' ? '#FFD23F' : winner === myMark ? '#FFD23F' : '#FF4D8D' },
             ]}>
               {winner === 'draw' ? 'DRAW!' : winner === myMark ? 'YOU WIN!' : 'YOU LOSE!'}
             </Text>
@@ -512,6 +592,121 @@ export default function XoxRoomScreen() {
           </View>
         </View>
       )}
+
+      {/* Chat Modal */}
+      <Modal
+        visible={chatOpen}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setChatOpen(false)}
+      >
+        <View style={styles.chatModalRoot}>
+          <Pressable style={styles.chatModalBackdrop} onPress={() => setChatOpen(false)} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
+            style={styles.chatKeyboardWrap}
+          >
+            <View style={styles.chatCard}>
+              <View style={styles.chatHandle} />
+
+              <View style={styles.chatHeader}>
+                <View style={styles.chatHeaderLeft}>
+                  <View style={styles.chatIconCircle}>
+                    <Ionicons name="chatbubble-ellipses" size={17} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.chatTitle}>XOX Live Chat</Text>
+                    <Text style={styles.chatSub}>Realtime only · not saved</Text>
+                  </View>
+                </View>
+                <Pressable style={styles.chatCloseBtn} onPress={() => setChatOpen(false)}>
+                  <Ionicons name="close" size={18} color="#fff" />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                ref={chatScrollRef}
+                style={styles.chatMessages}
+                contentContainerStyle={styles.chatMessagesContent}
+                showsVerticalScrollIndicator={false}
+                automaticallyAdjustKeyboardInsets
+                keyboardShouldPersistTaps="handled"
+                onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+              >
+                {chatMessages.length === 0 ? (
+                  <View style={styles.chatEmptyBox}>
+                    <View style={styles.chatEmptyIcon}>
+                      <Ionicons name="chatbubbles-outline" size={32} color="rgba(255,216,122,0.9)" />
+                    </View>
+                    <Text style={styles.chatEmpty}>No messages yet</Text>
+                    <Text style={styles.chatEmptySmall}>Send a quick message to your opponent.</Text>
+                  </View>
+                ) : (
+                  chatMessages.map((msg) => {
+                    const mine = msg.userId === myUid;
+                    return (
+                      <View
+                        key={msg.id}
+                        style={[
+                          styles.chatMessageRow,
+                          mine ? styles.chatMessageRowMine : styles.chatMessageRowOpponent,
+                        ]}
+                      >
+                        {!mine && (
+                          <View style={styles.chatAvatar}>
+                            <Text style={styles.chatAvatarText}>
+                              {(msg.displayName || 'O').charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={[styles.chatBubble, mine ? styles.chatBubbleMine : styles.chatBubbleOpponent]}>
+                          {!mine && (
+                            <Text style={styles.chatName} numberOfLines={1}>
+                              {msg.displayName || 'Opponent'}
+                            </Text>
+                          )}
+                          <Text style={styles.chatMsgText}>{msg.text}</Text>
+                          <View style={styles.chatMetaRow}>
+                            <Text style={[styles.chatTime, mine && styles.chatTimeMine]}>
+                              {fmtChatTime(msg.createdAt)}
+                            </Text>
+                            {mine && (
+                              <Ionicons name="checkmark-done" size={13} color="rgba(255,255,255,0.72)" />
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
+
+              <View style={styles.chatInputRow}>
+                <TextInput
+                  value={chatText}
+                  onChangeText={setChatText}
+                  placeholder="Write a message..."
+                  placeholderTextColor="rgba(255,255,255,0.38)"
+                  style={styles.chatInput}
+                  maxLength={140}
+                  returnKeyType="send"
+                  onSubmitEditing={sendChatMessage}
+                  multiline
+                />
+                <Pressable
+                  style={[styles.chatSendBtn, !chatText.trim() && styles.chatSendBtnDisabled]}
+                  onPress={sendChatMessage}
+                  disabled={!chatText.trim()}
+                >
+                  <Ionicons name="send" size={18} color="#fff" />
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -535,8 +730,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
+    paddingVertical: 12,
+    gap: 10,
   },
   backBtn: {
     width: 42,
@@ -547,6 +742,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: { flex: 1, color: '#fff', fontSize: 20, fontWeight: '900', textAlign: 'center' },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chatBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(30,70,50,0.90)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,216,122,0.30)',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 999,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFD23F',
+    borderWidth: 1.5,
+    borderColor: '#0B1020',
+  },
+  chatBadgeText: { color: '#0B1020', fontSize: 8, fontWeight: '900' },
+  coinPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,210,63,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,210,63,0.32)',
+  },
+  coinText: { color: '#FFD23F', fontSize: 12, fontWeight: '900' },
 
   // Players row
   playersRow: {
@@ -649,12 +886,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  waitTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
+  waitTitle: { color: '#fff', fontSize: 22, fontWeight: '900', textAlign: 'center' },
   waitSub: {
     color: 'rgba(255,255,255,0.55)',
     fontSize: 14,
@@ -711,4 +943,155 @@ const styles = StyleSheet.create({
   rematchBtn: { backgroundColor: '#FF7A00' },
   lobbyBtn:   { backgroundColor: '#fff' },
   overlayBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
+
+  // Chat modal
+  chatModalRoot: { flex: 1, justifyContent: 'flex-end' },
+  chatModalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.64)' },
+  chatKeyboardWrap: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 10,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+  },
+  chatCard: {
+    width: '100%',
+    maxWidth: 430,
+    alignSelf: 'center',
+    height: '82%',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(3,26,15,0.99)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,216,122,0.30)',
+    shadowColor: '#000',
+    shadowOpacity: 0.55,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 26,
+    elevation: 24,
+  },
+  chatHandle: {
+    alignSelf: 'center',
+    width: 48,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginTop: 9,
+    marginBottom: 2,
+  },
+  chatHeader: {
+    minHeight: 64,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,216,122,0.14)',
+  },
+  chatHeaderLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  chatIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,216,122,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,216,122,0.30)',
+  },
+  chatTitle: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  chatSub:   { color: 'rgba(255,255,255,0.50)', fontSize: 11, fontWeight: '700', marginTop: 1 },
+  chatCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  chatMessages: { flex: 1 },
+  chatMessagesContent: { padding: 14, gap: 8 },
+  chatEmptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 48, gap: 8 },
+  chatEmptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,216,122,0.12)',
+  },
+  chatEmpty:      { color: '#fff', fontSize: 16, fontWeight: '900' },
+  chatEmptySmall: { color: 'rgba(255,255,255,0.48)', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  chatMessageRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', maxWidth: '84%' },
+  chatMessageRowMine:     { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
+  chatMessageRowOpponent: { alignSelf: 'flex-start' },
+  chatAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  chatAvatarText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  chatBubble: {
+    maxWidth: 220,
+    borderRadius: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    gap: 3,
+  },
+  chatBubbleMine: {
+    backgroundColor: 'rgba(255,122,0,0.85)',
+    borderBottomRightRadius: 5,
+  },
+  chatBubbleOpponent: {
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderBottomLeftRadius: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  chatName:    { color: 'rgba(255,255,255,0.60)', fontSize: 11, fontWeight: '700' },
+  chatMsgText: { color: '#fff', fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  chatMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  chatTime:     { color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '700' },
+  chatTimeMine: { color: 'rgba(255,255,255,0.60)' },
+  chatInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,216,122,0.14)',
+    backgroundColor: 'rgba(0,0,0,0.22)',
+  },
+  chatInput: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 100,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  chatSendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF7A00',
+  },
+  chatSendBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.15)' },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, StyleSheet, Text, View } from 'react-native';
+import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { STRIPE_COLORS } from '../constants/categories';
 import { buildPuzzle } from '../lib/puzzle';
@@ -26,6 +26,14 @@ type WordGridProps = {
   soundEnabled?: boolean;
 };
 
+type PendingLine = {
+  entry: FoundEntry;
+  progress: Animated.Value;
+};
+
+const AnimatedLine = Animated.createAnimatedComponent(Line);
+const LINE_DRAW_DURATION = 360;
+
 export function WordGrid({
   words,
   seed,
@@ -51,22 +59,48 @@ export function WordGrid({
 
   const [dragStart, setDragStart] = useState<Point | null>(null);
   const [dragEnd, setDragEnd] = useState<Point | null>(null);
+  const [pendingLine, setPendingLine] = useState<PendingLine | null>(null);
 
   const dragStartRef = useRef<Point | null>(null);
   const dragEndRef = useRef<Point | null>(null);
-
   const foundRef = useRef<FoundEntry[]>(found);
   const onFoundRef = useRef(onFound);
+  const animatingRef = useRef(false);
 
   useEffect(() => {
-    // Include opponent-found words too, because live battle uses one shared board.
-    // This prevents both players from scoring the same word twice.
     foundRef.current = [...found, ...opponentFound];
   }, [found, opponentFound]);
 
   useEffect(() => {
     onFoundRef.current = onFound;
   }, [onFound]);
+
+  const resetDrag = () => {
+    setDragStart(null);
+    setDragEnd(null);
+    dragStartRef.current = null;
+    dragEndRef.current = null;
+  };
+
+  const animateMatchedLine = (entry: FoundEntry, afterAnimation: () => void) => {
+    const progress = new Animated.Value(0);
+
+    animatingRef.current = true;
+    setPendingLine({ entry, progress });
+
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: LINE_DRAW_DURATION,
+      useNativeDriver: false,
+    }).start(() => {
+      afterAnimation();
+
+      setTimeout(() => {
+        setPendingLine(null);
+        animatingRef.current = false;
+      }, 40);
+    });
+  };
 
   const clamp = (num: number, min: number, max: number) => {
     return Math.max(min, Math.min(max, num));
@@ -163,14 +197,13 @@ export function WordGrid({
   };
 
   const finishSelection = () => {
+    if (animatingRef.current) return;
+
     const start = dragStartRef.current;
     const end = dragEndRef.current;
 
     if (!start || !end) {
-      setDragStart(null);
-      setDragEnd(null);
-      dragStartRef.current = null;
-      dragEndRef.current = null;
+      resetDrag();
       return;
     }
 
@@ -183,12 +216,6 @@ export function WordGrid({
     const selectedWord = lettersBetween(fixed.start, fixed.end);
     const reversedWord = selectedWord.split('').reverse().join('');
 
-    /*
-      This checks the actual puzzle placements first.
-      It means the player can find ANY word in ANY order.
-      Example: if the list has 5 words, the user can match word 3 first,
-      then word 1, then word 5. It does not force sequential matching.
-    */
     const placementMatch = puzzle.placements.find((placement) => {
       const sameDirection =
         sameExactPoint(placement.start, fixed.start) &&
@@ -221,7 +248,7 @@ export function WordGrid({
           sameExactPoint(placementMatch.start, fixed.end) &&
           sameExactPoint(placementMatch.end, fixed.start);
 
-        onFoundRef.current({
+        const finalEntry: FoundEntry = {
           word: matchedWord,
           start:
             reverseMatch || reverseMatchFromPlacement
@@ -232,26 +259,34 @@ export function WordGrid({
               ? fixed.start
               : fixed.end,
           color,
+        };
+
+        resetDrag();
+        playGameSound('correct', soundEnabled).catch(() => {});
+
+        animateMatchedLine(finalEntry, () => {
+          onFoundRef.current(finalEntry);
         });
+
+        return;
       }
     } else if (selectedWord.length > 1) {
       playGameSound('wrong', soundEnabled).catch(() => {});
     }
 
-    setDragStart(null);
-    setDragEnd(null);
-    dragStartRef.current = null;
-    dragEndRef.current = null;
+    resetDrag();
   };
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
+      onStartShouldSetPanResponder: () => !animatingRef.current,
+      onStartShouldSetPanResponderCapture: () => !animatingRef.current,
+      onMoveShouldSetPanResponder: () => !animatingRef.current,
+      onMoveShouldSetPanResponderCapture: () => !animatingRef.current,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (evt) => {
+        if (animatingRef.current) return;
+
         const { locationX, locationY } = evt.nativeEvent;
         const point = pointFromTouch(locationX, locationY);
 
@@ -263,6 +298,8 @@ export function WordGrid({
         playGameSound('tap', soundEnabled).catch(() => {});
       },
       onPanResponderMove: (evt) => {
+        if (animatingRef.current) return;
+
         const { locationX, locationY } = evt.nativeEvent;
         const point = pointFromTouch(locationX, locationY);
 
@@ -277,12 +314,7 @@ export function WordGrid({
   const linePoints = dragStart && dragEnd ? getLinePoints(dragStart, dragEnd) : [];
 
   const isSelected = (row: number, col: number) => {
-    const isInActiveDrag = linePoints.some((p) => p[0] === row && p[1] === col);
-    const isInFound = [...found, ...opponentFound].some((entry) =>
-      getLinePoints(entry.start, entry.end).some((p) => p[0] === row && p[1] === col)
-    );
-
-    return isInActiveDrag || isInFound;
+    return linePoints.some((p) => p[0] === row && p[1] === col);
   };
 
   const isHint = (row: number, col: number) => {
@@ -294,57 +326,83 @@ export function WordGrid({
     y: point[0] * cell + cell / 2,
   });
 
+  const renderStaticLine = (entry: FoundEntry, options?: { opponent?: boolean }) => {
+    const startPoint = centerOf(entry.start);
+    const endPoint = centerOf(entry.end);
+
+    return (
+      <Line
+        key={`${options?.opponent ? 'opp-' : ''}${entry.word}-${entry.start.join('-')}-${entry.end.join('-')}`}
+        x1={startPoint.x}
+        y1={startPoint.y}
+        x2={endPoint.x}
+        y2={endPoint.y}
+        stroke={options?.opponent ? '#FF4D8D' : entry.color}
+        strokeWidth={options?.opponent ? Math.max(8, cell * 0.56) : Math.max(10, cell * 0.68)}
+        strokeLinecap="round"
+        opacity={options?.opponent ? 0.34 : 0.68}
+      />
+    );
+  };
+
+  const renderPendingLine = () => {
+    if (!pendingLine) return null;
+
+    const startPoint = centerOf(pendingLine.entry.start);
+    const endPoint = centerOf(pendingLine.entry.end);
+
+    const x2 = pendingLine.progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [startPoint.x, endPoint.x],
+    });
+    const y2 = pendingLine.progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [startPoint.y, endPoint.y],
+    });
+    const opacity = pendingLine.progress.interpolate({
+      inputRange: [0, 0.18, 1],
+      outputRange: [0.1, 0.82, 0.74],
+    });
+
+    return (
+      <AnimatedLine
+        key={`pending-${pendingLine.entry.word}`}
+        x1={startPoint.x}
+        y1={startPoint.y}
+        x2={x2 as any}
+        y2={y2 as any}
+        stroke={pendingLine.entry.color}
+        strokeWidth={Math.max(12, cell * 0.74)}
+        strokeLinecap="round"
+        opacity={opacity as any}
+      />
+    );
+  };
+
   return (
     <View
       style={[styles.grid, { width, height: width }]}
       {...panResponder.panHandlers}
     >
       <Svg pointerEvents="none" width={width} height={width} style={StyleSheet.absoluteFill}>
-        {opponentFound.map((entry) => {
-          const start = centerOf(entry.start);
-          const end = centerOf(entry.end);
-          return (
-            <Line
-              key={`opp-${entry.word}-${entry.start.join('-')}-${entry.end.join('-')}`}
-              x1={start.x}
-              y1={start.y}
-              x2={end.x}
-              y2={end.y}
-              stroke="#FF4D8D"
-              strokeWidth={Math.max(8, cell * 0.56)}
-              strokeLinecap="round"
-              opacity={0.34}
-            />
-          );
-        })}
-        {found.map((entry) => {
-          const start = centerOf(entry.start);
-          const end = centerOf(entry.end);
-          return (
-            <Line
-              key={`${entry.word}-${entry.start.join('-')}-${entry.end.join('-')}`}
-              x1={start.x}
-              y1={start.y}
-              x2={end.x}
-              y2={end.y}
-              stroke={entry.color}
-              strokeWidth={Math.max(10, cell * 0.68)}
-              strokeLinecap="round"
-              opacity={0.68}
-            />
-          );
-        })}
+        {opponentFound.map((entry) => renderStaticLine(entry, { opponent: true }))}
+
+        {found.map((entry) => renderStaticLine(entry))}
+
+        {renderPendingLine()}
+
         {dragStart && dragEnd ? (() => {
           const fixed = normalizeLine(dragStart, dragEnd);
-          const start = centerOf(fixed.start);
-          const end = centerOf(fixed.end);
+          const startPoint = centerOf(fixed.start);
+          const endPoint = centerOf(fixed.end);
+
           return (
             <Line
               key="active-selection"
-              x1={start.x}
-              y1={start.y}
-              x2={end.x}
-              y2={end.y}
+              x1={startPoint.x}
+              y1={startPoint.y}
+              x2={endPoint.x}
+              y2={endPoint.y}
               stroke="#FFD23F"
               strokeWidth={Math.max(10, cell * 0.66)}
               strokeLinecap="round"
@@ -396,28 +454,35 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: 22,
   },
+
   row: {
     flexDirection: 'row',
   },
+
   cell: {
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   cellSelected: {
-    backgroundColor: 'rgba(253,187,45,0.22)',
+    backgroundColor: 'rgba(253,187,45,0.16)',
     borderRadius: 12,
   },
+
   cellHint: {
     backgroundColor: 'rgba(255,77,141,0.22)',
     borderRadius: 12,
   },
+
   letter: {
     color: '#2A1666',
     fontWeight: '900',
   },
+
   letterSelected: {
     color: '#5B3500',
   },
+
   letterHint: {
     color: '#FF4D8D',
   },

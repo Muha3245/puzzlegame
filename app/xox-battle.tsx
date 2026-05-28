@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { ScreenShell } from '../components/ScreenShell';
+import { useAppTheme } from '../lib/appTheme';
 import {
   acceptXoxRoom,
   createXoxRoom,
@@ -131,18 +132,20 @@ export default function XoxBattleScreen() {
     }
   };
 
+  const { C } = useAppTheme();
+
   return (
     <ScreenShell title="XOX Online" subtitle="Challenge friends to real-time Tic Tac Toe">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* Hero */}
-        <View style={styles.hero}>
+        <View style={[styles.hero, { backgroundColor: C.surface, borderColor: C.divider }]}>
           <View style={styles.heroIcon}>
             <Ionicons name="grid-outline" size={26} color="#fff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>Pick board size</Text>
-            <Text style={styles.heroSub}>
+            <Text style={[styles.heroTitle, { color: C.ink }]}>Pick board size</Text>
+            <Text style={[styles.heroSub, { color: C.muted }]}>
               Choose size, then tap a friend to challenge them
             </Text>
           </View>
@@ -155,18 +158,19 @@ export default function XoxBattleScreen() {
               key={b.size}
               style={[
                 styles.sizeCard,
+                { backgroundColor: C.surface, borderColor: C.divider },
                 boardSize === b.size && { backgroundColor: b.color, borderColor: b.color },
               ]}
               onPress={() => setBoardSize(b.size)}
             >
-              <Text style={styles.sizeLabel}>{b.label}</Text>
-              <Text style={styles.sizeSub}>{b.sub}</Text>
+              <Text style={[styles.sizeLabel, { color: boardSize === b.size ? '#fff' : C.ink }]}>{b.label}</Text>
+              <Text style={[styles.sizeSub, { color: boardSize === b.size ? 'rgba(255,255,255,0.80)' : C.muted }]}>{b.sub}</Text>
             </AnimatedPressable>
           ))}
         </View>
 
         {loading && (
-          <ActivityIndicator color="#fff" size="large" style={{ marginVertical: 30 }} />
+          <ActivityIndicator color={C.ink} size="large" style={{ marginVertical: 30 }} />
         )}
 
         {/* ── Friends ── */}
@@ -175,13 +179,13 @@ export default function XoxBattleScreen() {
           <EmptyRow text="Add friends first from the Friends screen, then challenge them here." />
         )}
         {friends.map((friend) => (
-          <View key={friend.uid} style={styles.friendCard}>
+          <View key={friend.uid} style={[styles.friendCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{initials(friend.displayName)}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{friend.displayName}</Text>
-              <Text style={styles.cardMeta}>{boardSize}×{boardSize} • XOX Online</Text>
+              <Text style={[styles.cardTitle, { color: C.ink }]}>{friend.displayName}</Text>
+              <Text style={[styles.cardMeta, { color: C.muted }]}>{boardSize}×{boardSize} • XOX Online</Text>
             </View>
             <AnimatedPressable
               disabled={busyId === friend.uid}
@@ -284,14 +288,14 @@ export default function XoxBattleScreen() {
           style={styles.completedHeader}
           onPress={() => setShowCompleted((v) => !v)}
         >
-          <Text style={styles.sectionTitle}>Completed Games</Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{rooms.completed.length}</Text>
+          <Text style={[styles.sectionTitle, { color: C.ink }]}>Completed Games</Text>
+          <View style={[styles.badge, { backgroundColor: C.divider }]}>
+            <Text style={[styles.badgeText, { color: C.ink }]}>{rooms.completed.length}</Text>
           </View>
           <Ionicons
             name={showCompleted ? 'chevron-up' : 'chevron-down'}
             size={18}
-            color="rgba(255,255,255,0.65)"
+            color={C.muted}
           />
         </AnimatedPressable>
 
@@ -312,20 +316,22 @@ export default function XoxBattleScreen() {
 // ── Sub-components ──────────────────────────────────────────────────────────
 
 function SectionHeader({ title, count }: { title: string; count: number }) {
+  const { C } = useAppTheme();
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>{count}</Text>
+      <Text style={[styles.sectionTitle, { color: C.ink }]}>{title}</Text>
+      <View style={[styles.badge, { backgroundColor: C.divider }]}>
+        <Text style={[styles.badgeText, { color: C.ink }]}>{count}</Text>
       </View>
     </View>
   );
 }
 
 function EmptyRow({ text }: { text: string }) {
+  const { C } = useAppTheme();
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyText}>{text}</Text>
+    <View style={[styles.empty, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.divider }]}>
+      <Text style={[styles.emptyText, { color: C.muted }]}>{text}</Text>
     </View>
   );
 }
@@ -341,9 +347,9 @@ function XoxRoomCard({
   busy: boolean;
   footer?: React.ReactNode;
 }) {
+  const { C } = useAppTheme();
   const opponent   = uid === room.player1Id ? room.player2Name : room.player1Name;
   const myMark     = uid === room.player1Id ? 'X' : 'O';
-  const opponentMark = myMark === 'X' ? 'O' : 'X';
   const resultText = !room.winner
     ? room.status.replace('_', ' ').toUpperCase()
     : room.winner === 'draw'
@@ -360,17 +366,17 @@ function XoxRoomCard({
     : '#FF4D8D';
 
   return (
-    <View style={styles.roomCard}>
+    <View style={[styles.roomCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
       <View style={styles.roomRow}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials(opponent)}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>{opponent}</Text>
-          <Text style={styles.cardMeta}>{room.boardSize}×{room.boardSize} Board</Text>
+          <Text style={[styles.cardTitle, { color: C.ink }]}>{opponent}</Text>
+          <Text style={[styles.cardMeta, { color: C.muted }]}>{room.boardSize}×{room.boardSize} Board</Text>
           <Text style={[styles.statusText, { color: resultColor }]}>{resultText}</Text>
         </View>
-        {busy && <ActivityIndicator color="#fff" size="small" />}
+        {busy && <ActivityIndicator color={C.ink} size="small" />}
       </View>
       {footer ?? null}
     </View>

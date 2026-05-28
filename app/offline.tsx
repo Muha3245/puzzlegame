@@ -4,23 +4,31 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { ScreenShell } from '../components/ScreenShell';
+import { useAppTheme } from '../lib/appTheme';
 
 function GameCard({ title, subtitle, icon, color, onPress }: any) {
+  const { C } = useAppTheme();
   return (
-    <AnimatedPressable style={[styles.card, { borderColor: color }]} onPress={onPress}>
+    <AnimatedPressable
+      style={[styles.card, { borderColor: color, backgroundColor: C.surface }]}
+      onPress={onPress}
+    >
       <View style={[styles.icon, { backgroundColor: color }]}>
         <Ionicons name={icon} size={32} color="#fff" />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+        <Text style={[styles.title, { color: C.ink }]}>{title}</Text>
+        <Text style={[styles.subtitle, { color: C.muted }]}>{subtitle}</Text>
       </View>
-      <View style={styles.playPill}><Text style={styles.playText}>PLAY</Text></View>
+      <View style={[styles.playPill, { backgroundColor: C.ink }]}>
+        <Text style={[styles.playText, { color: C.bg }]}>PLAY</Text>
+      </View>
     </AnimatedPressable>
   );
 }
 
 export default function OfflineGames() {
+  const { C } = useAppTheme();
   return (
     <ScreenShell title="Offline Games" subtitle="No internet needed. Play solo, bot or same mobile.">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -38,9 +46,11 @@ export default function OfflineGames() {
           color="#FF7A00"
           onPress={() => router.push('/xox' as any)}
         />
-        <View style={styles.note}>
-          <Ionicons name="wifi-outline" size={20} color="#8DE7FF" />
-          <Text style={styles.noteText}>Online is currently only for Word Search Battle using your existing database.</Text>
+        <View style={[styles.note, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Ionicons name="wifi-outline" size={20} color="#4CC38A" />
+          <Text style={[styles.noteText, { color: C.muted }]}>
+            Online is currently only for Word Search Battle using your existing database.
+          </Text>
         </View>
       </ScrollView>
     </ScreenShell>
@@ -49,12 +59,27 @@ export default function OfflineGames() {
 
 const styles = StyleSheet.create({
   content: { padding: 18, paddingBottom: 34, gap: 16 },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 140, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1.5, borderRadius: 28, padding: 18 },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    minHeight: 140,
+    borderWidth: 1.5,
+    borderRadius: 28,
+    padding: 18,
+  },
   icon: { width: 64, height: 64, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#fff', fontSize: 22, fontWeight: '900' },
-  subtitle: { color: 'rgba(255,255,255,0.68)', fontSize: 13, fontWeight: '700', lineHeight: 18, marginTop: 5 },
-  playPill: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  playText: { color: '#120F2D', fontWeight: '900', fontSize: 11 },
-  note: { flexDirection: 'row', gap: 10, backgroundColor: 'rgba(141,231,255,0.13)', borderRadius: 20, padding: 14, alignItems: 'center' },
-  noteText: { flex: 1, color: 'rgba(255,255,255,0.78)', fontWeight: '700', lineHeight: 18 },
+  title: { fontSize: 22, fontWeight: '900' },
+  subtitle: { fontSize: 13, fontWeight: '700', lineHeight: 18, marginTop: 5 },
+  playPill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  playText: { fontWeight: '900', fontSize: 11 },
+  note: {
+    flexDirection: 'row',
+    gap: 10,
+    borderRadius: 20,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  noteText: { flex: 1, fontWeight: '700', lineHeight: 18 },
 });

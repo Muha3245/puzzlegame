@@ -1,22 +1,74 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
-import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { GlassCard } from '../components/ui/GlassCard';
-import { HighlightText } from '../components/HighlightText';
-import { Theme } from '../constants/theme';
+import React, { useMemo, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppState } from '../lib/storage';
 
-const BG_URI =
-  'https://images.unsplash.com/photo-1605792657660-596af9009e82?auto=format&fit=crop&w=1200&q=80';
+const BG = '#EDE8E1';
+const INK = '#1C1C1E';
+const MUTED = '#8A8480';
+const DIVIDER = '#D8D3CC';
+const ORANGE = '#D94F2B';
+const GREEN = '#4CC38A';
+const YELLOW = '#FFD23F';
+const PURPLE = '#8E6BFF';
 
 const PACKS = [
-  { id: 'p1', coins: 100,   price: '$0.99',  label: 'Starter',    color: '#FF7A00' },
-  { id: 'p2', coins: 500,   price: '$3.99',  label: 'Handy',      color: '#4CC38A', bonus: '+50' },
-  { id: 'p3', coins: 1500,  price: '$9.99',  label: 'Best Value', color: '#FFD23F', bonus: '+200', popular: true },
-  { id: 'p4', coins: 5000,  price: '$24.99', label: 'Mega',       color: '#E94B8C', bonus: '+1000' },
-  { id: 'p5', coins: 15000, price: '$59.99', label: 'Ultimate',   color: '#B36AE2', bonus: '+4000' },
+  {
+    id: 'p1',
+    coins: 100,
+    bonus: 0,
+    price: '$0.99',
+    label: 'Starter',
+    tag: 'Small boost',
+    color: ORANGE,
+  },
+  {
+    id: 'p2',
+    coins: 500,
+    bonus: 50,
+    price: '$3.99',
+    label: 'Handy',
+    tag: 'Good for hints',
+    color: GREEN,
+  },
+  {
+    id: 'p3',
+    coins: 1500,
+    bonus: 200,
+    price: '$9.99',
+    label: 'Best Value',
+    tag: 'Most popular',
+    color: YELLOW,
+    popular: true,
+  },
+  {
+    id: 'p4',
+    coins: 5000,
+    bonus: 1000,
+    price: '$24.99',
+    label: 'Mega',
+    tag: 'Battle ready',
+    color: PURPLE,
+  },
+  {
+    id: 'p5',
+    coins: 15000,
+    bonus: 4000,
+    price: '$59.99',
+    label: 'Ultimate',
+    tag: 'Power player',
+    color: '#E94B8C',
+  },
 ];
 
 const DAILY_REWARDS = [
@@ -29,455 +81,664 @@ const DAILY_REWARDS = [
   { day: 7, coins: 100 },
 ];
 
+function totalCoins(pack: (typeof PACKS)[number]) {
+  return pack.coins + pack.bonus;
+}
+
 export default function Coins() {
   const { state, addCoins } = useAppState();
-  const [selectedPack, setSelectedPack] = useState('p3');
-  const [busy, setBusy] = useState<'idle' | 'processing' | 'done'>('idle');
+  const insets = useSafeAreaInsets();
 
-  const selected = PACKS.find((p) => p.id === selectedPack)!;
+  const [selectedPack, setSelectedPack] = useState('p3');
+  const [busy, setBusy] = useState(false);
+  const [successText, setSuccessText] = useState('');
+
+  const selected = useMemo(
+    () => PACKS.find((pack) => pack.id === selectedPack) || PACKS[2],
+    [selectedPack]
+  );
 
   const handleBuy = () => {
-    setBusy('processing');
+    if (busy) return;
+
+    const amount = totalCoins(selected);
+
+    setBusy(true);
+    addCoins(amount);
+    setSuccessText(`+${amount.toLocaleString()} coins added`);
+
     setTimeout(() => {
-      setBusy('done');
-      addCoins(selected.coins);
-      setTimeout(() => {
-        setSelectedPack('p3');
-        setBusy('idle');
-      }, 800);
+      setBusy(false);
+      setSuccessText('');
     }, 1200);
   };
 
   return (
-    <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
-      <View style={styles.overlay} />
-      <View style={styles.orb1} />
-      <View style={styles.orb2} />
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+    <View style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top,
+            paddingBottom:
+              Platform.OS === 'ios'
+                ? Math.max(insets.bottom, 24) + 24
+                : Math.max(insets.bottom, 18) + 24,
+          },
+        ]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color="#fff" />
+            <Ionicons name="chevron-back" size={22} color={INK} />
           </Pressable>
-          <HighlightText size="large">Get Coins</HighlightText>
-          <View style={{ width: 40 }} />
-        </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Current coins display */}
-          <GlassCard style={styles.coinsCard}>
-            <View style={styles.coinsDisplay}>
-              <View style={styles.coinIcon}>
-                <Ionicons name="logo-bitcoin" size={32} color={Theme.warn} />
-              </View>
-              <View>
-                <Text style={styles.coinLabel}>Your Balance</Text>
-                <HighlightText size="large" color={Theme.warn}>
-                  {state.coins} coins
-                </HighlightText>
-              </View>
-            </View>
-          </GlassCard>
-
-          {/* Info banner */}
-          <View style={styles.infoBanner}>
-            <Ionicons name="information-circle" size={18} color={Theme.primary} />
-            <Text style={styles.infoText}>Spend coins on hints & power-ups. No ads. +10 free per level.</Text>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Coin Store</Text>
+            <Text style={styles.headerSub}>Upgrade your game power</Text>
           </View>
 
-          {/* Coin packs */}
-          <HighlightText
-            size="small"
-            color={Theme.textDim}
-            style={styles.sectionTitle}
-          >
-            COIN PACKAGES
-          </HighlightText>
+          <Pressable onPress={() => router.push('/settings')} style={styles.iconBtn}>
+            <Ionicons name="settings-outline" size={20} color={INK} />
+          </Pressable>
+        </View>
 
-          <View style={styles.packsGrid}>
-            {PACKS.map((pack) => {
-              const isSelected = pack.id === selectedPack;
-              return (
-                <Pressable
-                  key={pack.id}
-                  onPress={() => setSelectedPack(pack.id)}
-                  style={[
-                    styles.packCard,
-                    isSelected && styles.packCardSelected,
-                    pack.popular && styles.packCardPopular,
-                  ]}
-                >
-                  {pack.popular && (
-                    <View style={styles.popularBadge}>
-                      <Text style={styles.popularText}>POPULAR</Text>
-                    </View>
-                  )}
+        {/* Balance card */}
+        <View style={styles.balanceCard}>
+          <View>
+            <Text style={styles.balanceLabel}>YOUR BALANCE</Text>
+            <Text style={styles.balanceValue}>{state.coins.toLocaleString()}</Text>
+            <Text style={styles.balanceSub}>Available coins</Text>
+          </View>
+
+          <View style={styles.bigCoin}>
+            <Ionicons name="logo-bitcoin" size={34} color={INK} />
+          </View>
+        </View>
+
+        {/* Info strip */}
+        <View style={styles.infoStrip}>
+          <View style={styles.infoIcon}>
+            <Ionicons name="flash" size={15} color="#fff" />
+          </View>
+          <Text style={styles.infoText}>
+            For now, purchase button directly adds coins. No payment gateway is connected.
+          </Text>
+        </View>
+
+        {/* Packages header */}
+        <View style={styles.sectionBar}>
+          <Text style={styles.sectionLabel}># COIN PACKAGES</Text>
+          <Text style={styles.sectionHint}>Tap to select</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Coin packages */}
+        <View style={styles.packsWrap}>
+          {PACKS.map((pack, index) => {
+            const isSelected = pack.id === selectedPack;
+            const amount = totalCoins(pack);
+
+            return (
+              <Pressable
+                key={pack.id}
+                onPress={() => setSelectedPack(pack.id)}
+                style={[
+                  styles.packCard,
+                  isSelected && styles.packCardSelected,
+                  pack.popular && styles.packCardPopular,
+                ]}
+              >
+                {pack.popular && (
+                  <View style={styles.popularBadge}>
+                    <Text style={styles.popularText}>POPULAR</Text>
+                  </View>
+                )}
+
+                <View style={styles.packTop}>
+                  <Text style={styles.packNum}>0{index + 1}</Text>
 
                   <View
                     style={[
                       styles.packIcon,
-                      { backgroundColor: `${pack.color}22`, borderColor: pack.color },
+                      {
+                        backgroundColor: isSelected ? INK : '#fff',
+                        borderColor: isSelected ? INK : DIVIDER,
+                      },
                     ]}
                   >
-                    <Text style={styles.coinEmoji}>💰</Text>
+                    <Ionicons
+                      name="logo-bitcoin"
+                      size={22}
+                      color={isSelected ? YELLOW : INK}
+                    />
                   </View>
+                </View>
 
-                  <HighlightText
-                    size="small"
-                    color={pack.color}
-                    style={styles.packLabel}
-                  >
-                    {pack.label}
-                  </HighlightText>
+                <Text style={styles.packLabel}>{pack.label}</Text>
+                <Text style={styles.packCoins}>{amount.toLocaleString()}</Text>
 
-                  <HighlightText size="large">{pack.coins}</HighlightText>
+                <View style={styles.packMetaRow}>
+                  <Text style={styles.packTag}>{pack.tag}</Text>
+                  <Text style={styles.packPrice}>{pack.price}</Text>
+                </View>
 
-                  {pack.bonus && (
-                    <Text style={[styles.bonusText, { color: pack.color }]}>
-                      {pack.bonus}
+                {pack.bonus > 0 && (
+                  <View style={styles.bonusPill}>
+                    <Ionicons name="gift-outline" size={12} color="#fff" />
+                    <Text style={styles.bonusText}>
+                      +{pack.bonus.toLocaleString()} bonus
                     </Text>
-                  )}
+                  </View>
+                )}
 
-                  <Text style={styles.priceText}>{pack.price}</Text>
-                </Pressable>
-              );
-            })}
+                {isSelected && (
+                  <View style={styles.selectedMark}>
+                    <Ionicons name="checkmark" size={13} color="#fff" />
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Daily rewards */}
+        <View style={styles.sectionBar}>
+          <Text style={styles.sectionLabel}># DAILY REWARDS</Text>
+          <Text style={styles.sectionHint}>Login bonus</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.rewardsRow}>
+          {DAILY_REWARDS.map((reward) => (
+            <View key={reward.day} style={styles.rewardCard}>
+              <Text style={styles.rewardDay}>D{reward.day}</Text>
+              <View style={styles.rewardIcon}>
+                <Ionicons name="gift-outline" size={15} color={INK} />
+              </View>
+              <Text style={styles.rewardCoins}>{reward.coins}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Selected package */}
+        <View style={styles.checkoutCard}>
+          <View style={styles.checkoutTop}>
+            <View>
+              <Text style={styles.checkoutLabel}>SELECTED PACKAGE</Text>
+              <Text style={styles.checkoutTitle}>{selected.label}</Text>
+              <Text style={styles.checkoutSub}>
+                {selected.coins.toLocaleString()} coins
+                {selected.bonus > 0
+                  ? ` + ${selected.bonus.toLocaleString()} bonus`
+                  : ''}
+              </Text>
+            </View>
+
+            <View style={styles.checkoutPriceBox}>
+              <Text style={styles.checkoutPrice}>{selected.price}</Text>
+            </View>
           </View>
 
-          {/* Daily rewards section */}
-          <HighlightText
-            size="small"
-            color={Theme.textDim}
-            style={styles.sectionTitle}
+          <View style={styles.checkoutDivider} />
+
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total coins to add</Text>
+            <Text style={styles.totalValue}>
+              {totalCoins(selected).toLocaleString()}
+            </Text>
+          </View>
+
+          <Pressable
+            disabled={busy}
+            onPress={handleBuy}
+            style={[styles.buyBtn, busy && styles.buyBtnDisabled]}
           >
-            7-DAY LOGIN REWARDS
-          </HighlightText>
-
-          <View style={styles.rewardsGrid}>
-            {DAILY_REWARDS.map((reward) => (
-              <View key={reward.day} style={styles.rewardItem}>
-                <View style={styles.rewardDay}>
-                  <Text style={styles.rewardDayText}>Day {reward.day}</Text>
-                </View>
-                <Ionicons name="gift" size={20} color={Theme.warn} />
-                <Text style={styles.rewardCoins}>{reward.coins}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Buy button */}
-          <View style={styles.buySection}>
-            <GlassCard style={styles.selectedPackInfo}>
-              <Text style={styles.selectedLabel}>Selected Package</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <Text style={{ fontSize: 24 }}>📦</Text>
-                <View style={{ flex: 1 }}>
-                  <HighlightText color={selected.color}>
-                    {selected.label}
-                  </HighlightText>
-                  <Text style={styles.selectedSub}>
-                    {selected.coins} coins • {selected.price}
-                  </Text>
-                </View>
-              </View>
-            </GlassCard>
-
-            <Pressable
-              disabled={busy !== 'idle'}
-              onPress={handleBuy}
-              style={[styles.buyBtn, busy !== 'idle' && styles.buyBtnDisabled]}
-            >
-              {busy === 'done' ? (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color={Theme.success} />
-                  <Text style={styles.buyBtnText}>Purchase Complete!</Text>
-                </>
-              ) : busy === 'processing' ? (
-                <Text style={styles.buyBtnText}>Processing...</Text>
-              ) : (
-                <>
-                  <Ionicons name="card" size={20} color="#fff" />
-                  <Text style={styles.buyBtnText}>Complete Purchase</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-
-          <View style={{ height: 20 }} />
-        </ScrollView>
-      </SafeAreaView>
-    </ImageBackground>
+            {successText ? (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Text style={styles.buyBtnText}>{successText}</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="add-circle" size={20} color="#fff" />
+                <Text style={styles.buyBtnText}>Complete Purchase</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: {
-    flex: 1,
-    backgroundColor: '#0D0500',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(13,5,0,0.84)',
-  },
-  orb1: {
-    position: 'absolute',
-    top: -50,
-    left: -50,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(255,100,0,0.13)',
-  },
-  orb2: {
-    position: 'absolute',
-    bottom: 60,
-    right: -40,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,60,0,0.09)',
-  },
   safe: {
     flex: 1,
+    backgroundColor: BG,
+  },
+
+  scroll: {
+    flex: 1,
+  },
+
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
   },
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 10,
+    paddingBottom: 16,
   },
 
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,120,0,0.15)',
+    borderRadius: 14,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: 'rgba(255,150,0,0.25)',
+    borderColor: DIVIDER,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  coinsCard: {
-    marginBottom: 16,
-    padding: 16,
+  headerCenter: {
+    alignItems: 'center',
   },
 
-  coinsDisplay: {
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: INK,
+  },
+
+  headerSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: MUTED,
+    marginTop: 2,
+  },
+
+  balanceCard: {
+    backgroundColor: INK,
+    borderRadius: 26,
+    padding: 22,
+    minHeight: 146,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
   },
 
-  coinIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,210,63,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  balanceLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#B8B1AB',
+    letterSpacing: 1,
   },
 
-  coinLabel: {
-    color: Theme.textDim,
+  balanceValue: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: '#fff',
+    lineHeight: 48,
+    marginTop: 8,
+  },
+
+  balanceSub: {
     fontSize: 12,
     fontWeight: '700',
-    marginBottom: 4,
+    color: '#B8B1AB',
+    marginTop: 2,
   },
 
-  infoBanner: {
+  bigCoin: {
+    width: 76,
+    height: 76,
+    borderRadius: 24,
+    backgroundColor: YELLOW,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '-8deg' }],
+  },
+
+  infoStrip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: 'rgba(255,120,0,0.12)',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 20,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: 'rgba(255,150,0,0.22)',
+    borderColor: DIVIDER,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 14,
+    marginBottom: 20,
+  },
+
+  infoIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: ORANGE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   infoText: {
     flex: 1,
-    color: Theme.textDim,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: MUTED,
+    lineHeight: 17,
   },
 
-  sectionTitle: {
-    marginTop: 12,
-    marginBottom: 12,
-    letterSpacing: 1.2,
+  sectionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    marginTop: 4,
   },
 
-  packsGrid: {
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: MUTED,
+    letterSpacing: 1.1,
+  },
+
+  sectionHint: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: INK,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: DIVIDER,
+    marginBottom: 14,
+  },
+
+  packsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 20,
+    marginBottom: 22,
   },
 
   packCard: {
     width: '48.5%',
-    borderRadius: 18,
-    padding: 14,
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    minHeight: 170,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: 'rgba(255,150,0,0.16)',
+    borderColor: DIVIDER,
+    borderRadius: 22,
+    padding: 14,
+    position: 'relative',
   },
 
   packCardSelected: {
-    backgroundColor: 'rgba(255,120,0,0.18)',
-    borderColor: Theme.primary,
+    borderColor: INK,
     borderWidth: 2,
+    backgroundColor: '#FFF8EC',
   },
 
   packCardPopular: {
-    borderColor: Theme.warn,
+    borderColor: YELLOW,
   },
 
   popularBadge: {
     position: 'absolute',
     top: -8,
-    right: 8,
-    backgroundColor: Theme.warn,
+    left: 14,
+    backgroundColor: YELLOW,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 999,
+    zIndex: 2,
   },
 
   popularText: {
-    color: '#0D0500',
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    color: INK,
+    letterSpacing: 0.8,
+  },
+
+  packTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+
+  packNum: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: DIVIDER,
   },
 
   packIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    fontSize: 24,
-  },
-
-  coinEmoji: {
-    fontSize: 24,
   },
 
   packLabel: {
-    fontSize: 11,
+    fontSize: 13,
+    fontWeight: '900',
+    color: INK,
+  },
+
+  packCoins: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: INK,
+    lineHeight: 34,
     marginTop: 4,
+  },
+
+  packMetaRow: {
+    marginTop: 6,
+    gap: 2,
+  },
+
+  packTag: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: MUTED,
+  },
+
+  packPrice: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: ORANGE,
+    marginTop: 2,
+  },
+
+  bonusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: INK,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 10,
   },
 
   bonusText: {
     fontSize: 10,
     fontWeight: '800',
-    marginTop: 2,
+    color: '#fff',
   },
 
-  priceText: {
-    color: Theme.textMute,
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-
-  rewardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 24,
-  },
-
-  rewardItem: {
-    width: '32%',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 14,
-    paddingVertical: 12,
+  selectedMark: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: ORANGE,
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
+  },
+
+  rewardsRow: {
+    flexDirection: 'row',
+    gap: 7,
+    marginBottom: 22,
+  },
+
+  rewardCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 15,
     borderWidth: 1,
-    borderColor: 'rgba(255,150,0,0.16)',
+    borderColor: DIVIDER,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 5,
   },
 
   rewardDay: {
-    backgroundColor: 'rgba(255,120,0,0.20)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    fontSize: 9,
+    fontWeight: '900',
+    color: MUTED,
   },
 
-  rewardDayText: {
-    color: Theme.primary,
-    fontSize: 10,
-    fontWeight: '800',
+  rewardIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: YELLOW,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   rewardCoins: {
-    color: Theme.warn,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
+    color: INK,
   },
 
-  buySection: {
-    gap: 12,
+  checkoutCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    padding: 16,
   },
 
-  selectedPackInfo: {
-    padding: 14,
+  checkoutTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 
-  selectedLabel: {
-    color: Theme.textDim,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  checkoutLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: MUTED,
+    letterSpacing: 0.9,
   },
 
-  selectedSub: {
-    color: Theme.textMute,
-    fontSize: 11,
+  checkoutTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: INK,
+    marginTop: 4,
+  },
+
+  checkoutSub: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: MUTED,
     marginTop: 2,
   },
 
+  checkoutPriceBox: {
+    backgroundColor: INK,
+    borderRadius: 16,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+
+  checkoutPrice: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#fff',
+  },
+
+  checkoutDivider: {
+    height: 1,
+    backgroundColor: DIVIDER,
+    marginVertical: 14,
+  },
+
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+
+  totalLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: MUTED,
+  },
+
+  totalValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: INK,
+  },
+
   buyBtn: {
-    backgroundColor: Theme.primary,
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: ORANGE,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    borderRadius: 14,
-    shadowColor: Theme.primary,
-    shadowOpacity: 0.5,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 14,
-    elevation: 7,
+    gap: 9,
   },
 
   buyBtnDisabled: {
-    opacity: 0.6,
+    opacity: 0.85,
   },
 
   buyBtnText: {
-    color: '#fff',
     fontSize: 15,
     fontWeight: '900',
+    color: '#fff',
   },
 });

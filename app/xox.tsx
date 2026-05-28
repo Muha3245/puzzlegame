@@ -4,7 +4,6 @@ import {
   Animated,
   Easing,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
 import { router } from 'expo-router';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { ScreenShell } from '../components/ScreenShell';
+import { useAppTheme } from '../lib/appTheme';
 import { playDrawSound, playGameSound, playLoseSound, playWinSound } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 
@@ -404,10 +404,11 @@ export default function Xox() {
         ? "Bot's Turn"
         : "O's Turn";
 
+  const { C } = useAppTheme();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScreenShell title="XOX" subtitle="Offline bot and same-mobile multiplayer">
-        <View style={styles.screen}>
+    <ScreenShell title="XOX" subtitle="Offline bot and same-mobile multiplayer">
+        <View style={[styles.screen, { backgroundColor: C.bg }]}>
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             {/* <View style={styles.heroCard}>
               <View style={styles.heroGlowOne} />
@@ -436,7 +437,11 @@ export default function Xox() {
                 return (
                   <AnimatedPressable
                     key={m.id}
-                    style={[styles.modeCard, active && styles.modeCardActive]}
+                    style={[
+                      styles.modeCard,
+                      { backgroundColor: C.surface, borderColor: C.divider },
+                      active && styles.modeCardActive,
+                    ]}
                     onPress={() => {
                       if (m.id === 'online') {
                         router.push('/xox-battle');
@@ -447,20 +452,20 @@ export default function Xox() {
                     }}
                   >
                     <View style={[styles.modeIconWrap, active && styles.modeIconWrapActive]}>
-                      <Ionicons name={m.icon} size={25} color={active ? '#fff' : 'rgba(255,255,255,0.48)'} />
+                      <Ionicons name={m.icon} size={25} color={active ? '#fff' : C.muted} />
                     </View>
 
-                    <Text style={[styles.modeLabel, active && styles.modeLabelActive]}>{m.label}</Text>
-                    <Text style={styles.modeSub}>{m.sub}</Text>
+                    <Text style={[styles.modeLabel, { color: C.muted }, active && styles.modeLabelActive]}>{m.label}</Text>
+                    <Text style={[styles.modeSub, { color: C.muted }]}>{m.sub}</Text>
                   </AnimatedPressable>
                 );
               })}
             </View>
 
-            <View style={styles.panel}>
+            <View style={[styles.panel, { backgroundColor: C.surface, borderColor: C.divider }]}>
               <View style={styles.panelHeader}>
-                <Text style={styles.panelTitle}>Board Size</Text>
-                <Text style={styles.panelSub}>Select your game layout</Text>
+                <Text style={[styles.panelTitle, { color: C.ink }]}>Board Size</Text>
+                <Text style={[styles.panelSub, { color: C.muted }]}>Select your game layout</Text>
               </View>
 
               <View style={styles.sizeRow}>
@@ -482,10 +487,10 @@ export default function Xox() {
             </View>
 
             {mode === 'bot' && (
-              <View style={styles.panel}>
+              <View style={[styles.panel, { backgroundColor: C.surface, borderColor: C.divider }]}>
                 <View style={styles.panelHeader}>
-                  <Text style={styles.panelTitle}>Difficulty</Text>
-                  <Text style={styles.panelSub}>Choose bot strength</Text>
+                  <Text style={[styles.panelTitle, { color: C.ink }]}>Difficulty</Text>
+                  <Text style={[styles.panelSub, { color: C.muted }]}>Choose bot strength</Text>
                 </View>
 
                 <View style={styles.diffRow}>
@@ -578,8 +583,7 @@ export default function Xox() {
 
           {result.winner && <ResultOverlay winner={result.winner} mode={mode} onPlayAgain={reset} />}
         </View>
-      </ScreenShell>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 

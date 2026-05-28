@@ -12,6 +12,7 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   ImageBackground,
   KeyboardAvoidingView,
@@ -1270,13 +1271,30 @@ export default function Game() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <Pressable
-            onPress={async () => {
+            onPress={() => {
+              if (isLiveBattle && roomId && !battleFinishedReason) {
+                Alert.alert(
+                  "Exit Battle?",
+                  `If you exit now, 15 coins will be deducted from your balance.`,
+                  [
+                    { text: "Stay", style: "cancel" },
+                    {
+                      text: "Exit & Lose Coins",
+                      style: "destructive",
+                      onPress: async () => {
+                        addCoins(-15);
+                        await quitBattleRoom(roomId).catch(() => {});
+                        router.replace("/battle");
+                      },
+                    },
+                  ],
+                );
+                return;
+              }
               if (isLiveBattle && roomId) {
-                await quitBattleRoom(roomId).catch(() => {});
                 router.replace("/battle");
                 return;
               }
-
               if (router.canGoBack()) {
                 router.back();
               } else {
@@ -1568,25 +1586,8 @@ export default function Game() {
                 const done = (isLiveBattle ? combinedFoundEntries : found).some(
                   (f) => f.word.toUpperCase().trim() === word,
                 );
-                return (
-                  <View
-                    key={word}
-                    style={[styles.wordChip, done && styles.wordChipDone]}
-                  >
-                    {done && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={11}
-                        color={Theme.success}
-                      />
-                    )}
-                    <Text
-                      style={[styles.wordText, done && styles.wordTextDone]}
-                    >
-                      {word}
-                    </Text>
-                  </View>
-                );
+
+                return <AnimatedWordChip key={word} word={word} done={done} />;
               })}
             </View>
           </View>
@@ -1988,6 +1989,54 @@ function TwistButton({
         </Text>
       </View>
     </Pressable>
+  );
+}
+
+function AnimatedWordChip({ word, done }: { word: string; done: boolean }) {
+  const doneAnim = useRef(new Animated.Value(done ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(doneAnim, {
+      toValue: done ? 1 : 0,
+      duration: done ? 360 : 120,
+      useNativeDriver: true,
+    }).start();
+  }, [done, doneAnim]);
+
+  const chipOpacity = doneAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.46],
+  });
+
+  const chipScale = doneAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.96],
+  });
+
+  const checkScale = doneAnim.interpolate({
+    inputRange: [0, 0.55, 1],
+    outputRange: [0.4, 1.2, 1],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.wordChip,
+        done && styles.wordChipDone,
+        {
+          opacity: chipOpacity,
+          transform: [{ scale: chipScale }],
+        },
+      ]}
+    >
+      {done && (
+        <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+          <Ionicons name="checkmark-circle" size={11} color={Theme.success} />
+        </Animated.View>
+      )}
+
+      <Text style={[styles.wordText, done && styles.wordTextDone]}>{word}</Text>
+    </Animated.View>
   );
 }
 

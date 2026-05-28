@@ -6,24 +6,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  ImageBackground,
   Pressable,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Circle, Path, Polygon, Rect } from 'react-native-svg';
 import { Theme } from '../constants/theme';
+import { useAppTheme } from '../lib/appTheme';
 import { ensureUserProfile, getMyProfile, logoutOnline, PublicUser } from '../lib/online';
 import { supabase } from '../lib/supabase';
 import { useAppState } from '../lib/storage';
-
-const BG_URI =
-  'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1200&q=80';
 
 type AvatarId =
   | 'game-controller' | 'person' | 'star' | 'rocket' | 'flame'
@@ -44,6 +39,7 @@ function safeAvatar(stored: string): AvatarId {
 }
 
 export default function Profile() {
+  const { C } = useAppTheme();
   const { state, updateProfile } = useAppState();
   const [name, setName] = useState(state.profile.name);
   const [onlineProfile, setOnlineProfile] = useState<PublicUser | null>(null);
@@ -126,22 +122,15 @@ export default function Profile() {
   const avatar = safeAvatar(state.profile.avatar);
 
   return (
-    <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
-      <View style={styles.overlay} />
-      <View style={styles.orb1} />
-      <View style={styles.orb2} />
-      <View style={styles.orb3} />
-
+    <View style={[styles.bg, { backgroundColor: C.bg }]}>
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
-        <StatusBar barStyle="light-content" />
-
         {/* ── Header ── */}
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
+        <View style={[styles.header, { borderBottomColor: C.divider }]}>
+          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+            <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
-          <Text style={styles.headerTitle}>My Profile</Text>
-          <Pressable onPress={() => router.push('/shop' as any)} style={styles.coinPill}>
+          <Text style={[styles.headerTitle, { color: C.ink }]}>My Profile</Text>
+          <Pressable onPress={() => router.push('/coins')} style={styles.coinPill}>
             <Ionicons name="logo-bitcoin" size={14} color={Theme.warn} />
             <Text style={styles.coinText}>{state.coins}</Text>
           </Pressable>
@@ -149,14 +138,14 @@ export default function Profile() {
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* ── Hero card ── */}
-          <View style={styles.heroCard}>
+          <View style={[styles.heroCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <View style={styles.avatarGlowRing}>
               <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulse }] }]}>
                 <Ionicons name={avatar} size={48} color={Theme.primary} />
               </Animated.View>
             </View>
 
-            <Text style={styles.heroName}>
+            <Text style={[styles.heroName, { color: C.ink }]}>
               {onlineProfile?.displayName ?? authDisplayName ?? state.profile.name}
             </Text>
             <View style={styles.titleBadge}>
@@ -199,12 +188,12 @@ export default function Profile() {
                 <Pressable
                   key={av}
                   onPress={() => updateProfile({ avatar: av })}
-                  style={[styles.avatarBtn, selected && styles.avatarBtnSelected]}
+                  style={[styles.avatarBtn, { backgroundColor: C.surface, borderColor: C.divider }, selected && styles.avatarBtnSelected]}
                 >
                   <Ionicons
                     name={av}
                     size={26}
-                    color={selected ? Theme.primary : Theme.textDim}
+                    color={selected ? Theme.primary : C.muted}
                   />
                   {selected && <View style={styles.avatarSelectedDot} />}
                 </Pressable>
@@ -215,14 +204,14 @@ export default function Profile() {
           {/* ── Player name ── */}
           <SectionLabel text="PLAYER NAME" />
           <View style={styles.nameRow}>
-            <View style={styles.nameInputWrap}>
-              <Ionicons name="person-outline" size={18} color={Theme.textDim} />
+            <View style={[styles.nameInputWrap, { backgroundColor: C.surface, borderColor: C.divider }]}>
+              <Ionicons name="person-outline" size={18} color={C.muted} />
               <TextInput
                 value={name}
                 onChangeText={setName}
                 placeholder="Enter player name"
-                placeholderTextColor="rgba(200,168,122,0.4)"
-                style={styles.input}
+                placeholderTextColor={C.muted}
+                style={[styles.input, { color: C.ink }]}
                 onSubmitEditing={saveName}
                 returnKeyType="done"
               />
@@ -234,7 +223,7 @@ export default function Profile() {
           </View>
 
           {/* ── Actions ── */}
-          <Pressable onPress={() => router.push('/shop' as any)} style={styles.shopBtn}>
+          <Pressable onPress={() => router.push('/coins')} style={styles.shopBtn}>
             <Ionicons name="storefront" size={20} color="#fff" />
             <Text style={styles.shopText}>Open Coin Shop</Text>
           </Pressable>
@@ -252,16 +241,17 @@ export default function Profile() {
           )}
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 
 function SectionLabel({ text }: { text: string }) {
+  const { C } = useAppTheme();
   return (
     <View style={styles.sectionLabelRow}>
-      <View style={styles.sectionLabelLine} />
-      <Text style={styles.sectionLabel}>{text}</Text>
-      <View style={styles.sectionLabelLine} />
+      <View style={[styles.sectionLabelLine, { backgroundColor: C.divider }]} />
+      <Text style={[styles.sectionLabel, { color: C.muted }]}>{text}</Text>
+      <View style={[styles.sectionLabelLine, { backgroundColor: C.divider }]} />
     </View>
   );
 }
@@ -272,40 +262,37 @@ function StatCard({ iconName, label, value, accent }: {
   value: string;
   accent: string;
 }) {
+  const { C } = useAppTheme();
   return (
-    <View style={[styles.statCard, { borderColor: `${accent}30` }]}>
+    <View style={[styles.statCard, { backgroundColor: C.surface, borderColor: `${accent}30` }]}>
       <View style={[styles.statIconWrap, { backgroundColor: `${accent}18` }]}>
         <Ionicons name={iconName} size={20} color={accent} />
       </View>
       <Text style={[styles.statValue, { color: accent }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statLabel, { color: C.muted }]}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#0D0500' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(13,5,0,0.82)' },
-  orb1: { position: 'absolute', top: -60, left: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(255,100,0,0.14)' },
-  orb2: { position: 'absolute', bottom: 80, right: -50, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,60,0,0.09)' },
-  orb3: { position: 'absolute', top: '50%', left: '20%', width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(255,180,0,0.06)' },
+  bg: { flex: 1 },
   safe: { flex: 1 },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
-  backBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,120,0,0.15)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.25)' },
-  headerTitle: { flex: 1, color: '#fff', fontSize: 22, fontWeight: '900' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  backBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  headerTitle: { flex: 1, fontSize: 22, fontWeight: '900' },
   coinPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: 'rgba(255,210,63,0.14)', borderWidth: 1, borderColor: 'rgba(255,210,63,0.35)' },
   coinText: { color: Theme.warn, fontSize: 13, fontWeight: '900' },
 
   content: { padding: 16, paddingBottom: 40 },
 
   // Hero card
-  heroCard: { alignItems: 'center', padding: 28, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.22)', marginBottom: 16, shadowColor: Theme.primary, shadowOpacity: 0.25, shadowOffset: { width: 0, height: 8 }, shadowRadius: 24, elevation: 8 },
-  avatarGlowRing: { width: 108, height: 108, borderRadius: 54, backgroundColor: 'rgba(255,120,0,0.10)', alignItems: 'center', justifyContent: 'center', marginBottom: 14, shadowColor: Theme.primary, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 0 }, shadowRadius: 20 },
+  heroCard: { alignItems: 'center', padding: 28, borderRadius: 28, borderWidth: 1, marginBottom: 16, shadowColor: Theme.primary, shadowOpacity: 0.15, shadowOffset: { width: 0, height: 8 }, shadowRadius: 24, elevation: 4 },
+  avatarGlowRing: { width: 108, height: 108, borderRadius: 54, backgroundColor: 'rgba(255,120,0,0.10)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   avatarRing: { width: 92, height: 92, borderRadius: 46, backgroundColor: 'rgba(255,120,0,0.15)', borderWidth: 2.5, borderColor: 'rgba(255,150,0,0.5)', alignItems: 'center', justifyContent: 'center' },
 
-  heroName: { color: '#fff', fontSize: 28, fontWeight: '900', marginBottom: 6 },
+  heroName: { fontSize: 28, fontWeight: '900', marginBottom: 6 },
   titleBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(255,120,0,0.18)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.35)', marginBottom: 12 },
   titleBadgeText: { color: Theme.primary, fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
 
@@ -318,26 +305,26 @@ const styles = StyleSheet.create({
 
   // Stats
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  statCard: { flex: 1, alignItems: 'center', padding: 14, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1 },
+  statCard: { flex: 1, alignItems: 'center', padding: 14, borderRadius: 20, borderWidth: 1 },
   statIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   statValue: { fontSize: 20, fontWeight: '900' },
-  statLabel: { color: Theme.textDim, fontSize: 11, fontWeight: '800', marginTop: 2 },
+  statLabel: { fontSize: 11, fontWeight: '800', marginTop: 2 },
 
   // Section label
   sectionLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 20, marginBottom: 12 },
-  sectionLabelLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,150,0,0.15)' },
-  sectionLabel: { color: Theme.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
+  sectionLabelLine: { flex: 1, height: 1 },
+  sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
 
   // Avatar grid
   avatarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
-  avatarBtn: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.16)' },
+  avatarBtn: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   avatarBtnSelected: { backgroundColor: 'rgba(255,120,0,0.22)', borderColor: Theme.primary, borderWidth: 2 },
   avatarSelectedDot: { position: 'absolute', bottom: 5, width: 5, height: 5, borderRadius: 3, backgroundColor: Theme.primary },
 
   // Name input
   nameRow: { flexDirection: 'row', gap: 10 },
-  nameInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 50, paddingHorizontal: 14, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,150,0,0.20)' },
-  input: { flex: 1, color: '#fff', fontWeight: '800', fontSize: 15, paddingVertical: 12 },
+  nameInputWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 50, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1 },
+  input: { flex: 1, fontWeight: '800', fontSize: 15, paddingVertical: 12 },
   saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, borderRadius: 16, alignContent: 'center', justifyContent: 'center', backgroundColor: Theme.primary, shadowColor: Theme.primary, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 5 },
   saveText: { color: '#fff', fontWeight: '900', fontSize: 14 },
 

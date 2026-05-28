@@ -2,7 +2,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  ImageBackground,
   Pressable,
   ScrollView,
   StatusBar,
@@ -12,16 +11,31 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppTheme } from '../lib/appTheme';
 import Svg, { Circle, Ellipse, Line, Path, Polygon, Rect } from 'react-native-svg';
 import { CATEGORIES } from '../constants/categories';
-import { Theme, GlassEffects } from '../constants/theme';
+import { Theme } from '../constants/theme';
 import { HighlightText } from '../components/HighlightText';
 import { useAppState } from '../lib/storage';
 import { Ionicons } from '@expo/vector-icons';
 
 const LEVELS_PER_CATEGORY = 8;
-const BG_URI =
-  'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1200&q=80';
+
+function withAlpha(hex: string, opacity: number) {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
+function getDifficultyAccent(difficulty: DifficultyId) {
+  if (difficulty === 'easy') return '#16A66A';
+  if (difficulty === 'medium') return '#F15E2E';
+  if (difficulty === 'hard') return '#8E6BFF';
+  return '#E94B8C';
+}
 
 type DifficultyId = 'easy' | 'medium' | 'hard' | 'pro';
 
@@ -47,29 +61,29 @@ const DIFFICULTIES: Record<
 > = {
   easy: {
     label: 'EASY',
-    activeBg: '#f5e7cf',
-    text: '#c01882',
+    activeBg: '#EAF8F0',
+    text: '#168A5A',
     gridSizes: [6, 6, 7, 7, 8, 8, 9, 9],
     wordCounts: [4, 5, 5, 6, 6, 7, 7, 8],
   },
   medium: {
     label: 'MEDIUM',
-    activeBg: '#eaff00',
-    text: '#c01882',
+    activeBg: '#FFF3E8',
+    text: '#D94F2B',
     gridSizes: [7, 8, 8, 9, 9, 10, 10, 11],
     wordCounts: [5, 6, 6, 7, 7, 8, 8, 9],
   },
   hard: {
     label: 'HARD',
-    activeBg: '#ffb1dc',
-    text: '#9c096d',
+    activeBg: '#F4ECFF',
+    text: '#7C3AED',
     gridSizes: [8, 9, 9, 10, 10, 11, 11, 12],
     wordCounts: [6, 6, 7, 8, 8, 9, 9, 10],
   },
   pro: {
     label: 'PRO',
-    activeBg: '#b9a7ff',
-    text: '#4b218d',
+    activeBg: '#FFEAF3',
+    text: '#D93676',
     gridSizes: [9, 10, 10, 11, 11, 12, 12, 13],
     wordCounts: [7, 8, 8, 9, 9, 10, 10, 11],
   },
@@ -804,19 +818,28 @@ function FloatingCategoryCard({
 
   const progressWidth = `${(completedCount / LEVELS_PER_CATEGORY) * 100}%`;
 
+  const { C } = useAppTheme();
+  const accent = getIconColor(item.name);
   return (
     <Animated.View style={{ width, transform: [{ translateY }, { scale }] }}>
       <Pressable
         onPress={onPress}
         onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start()}
-        style={styles.categoryCard}
+        style={[
+          styles.categoryCard,
+          {
+            backgroundColor: C.surface,
+            borderColor: C.divider,
+            shadowColor: C.mode === 'dark' ? '#000' : accent,
+          },
+        ]}
       >
         <View style={styles.progressTop}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: progressWidth as any }]} />
+          <View style={[styles.progressTrack, { backgroundColor: withAlpha(accent, C.mode === 'dark' ? 0.18 : 0.12) }]}>
+            <View style={[styles.progressFill, { width: progressWidth as any, backgroundColor: accent }]} />
           </View>
-          <View style={styles.progressBadge}>
+          <View style={[styles.progressBadge, { backgroundColor: accent }]}>
             <Text style={styles.progressBadgeText}>{completedCount}/{LEVELS_PER_CATEGORY}</Text>
           </View>
         </View>
@@ -825,8 +848,8 @@ function FloatingCategoryCard({
           <CategorySvgIcon name={item.name} size={86} />
         </View>
 
-        <View style={styles.categoryTitleWrap}>
-          <Text numberOfLines={2} style={styles.categoryTitle}>
+        <View style={[styles.categoryTitleWrap, { backgroundColor: withAlpha(accent, C.mode === 'dark' ? 0.20 : 0.10), borderColor: withAlpha(accent, C.mode === 'dark' ? 0.36 : 0.18) }]}>
+          <Text numberOfLines={2} style={[styles.categoryTitle, { color: C.ink }]}>
             {item.name}
           </Text>
         </View>
@@ -844,10 +867,13 @@ function DifficultyTabs({
   active: DifficultyId;
   onChange: (value: DifficultyId) => void;
 }) {
+  const { C } = useAppTheme();
+
   return (
     <View style={styles.diffRow}>
       {DIFFICULTY_ORDER.map((item) => {
         const isActive = item === active;
+        const accent = getDifficultyAccent(item);
 
         return (
           <Pressable
@@ -855,18 +881,23 @@ function DifficultyTabs({
             onPress={() => onChange(item)}
             style={[
               styles.diffBtn,
+              {
+                backgroundColor: isActive
+                  ? withAlpha(accent, C.mode === 'dark' ? 0.22 : 0.11)
+                  : C.surface,
+                borderColor: isActive ? accent : C.divider,
+                shadowColor: isActive ? accent : C.shadow || '#000',
+              },
               isActive && {
-                backgroundColor: DIFFICULTIES[item].activeBg,
-                borderColor: '#ffffff',
                 transform: [{ translateY: -2 }],
               },
             ]}
           >
-            <Text style={[styles.diffBtnText, isActive && { color: DIFFICULTIES[item].text }]}>
+            <Text style={[styles.diffBtnText, { color: isActive ? accent : C.ink }]}>
               {DIFFICULTIES[item].label}
             </Text>
 
-            {isActive ? <View style={styles.activeDot} /> : null}
+            {isActive ? <View style={[styles.activeDot, { backgroundColor: accent }]} /> : null}
           </Pressable>
         );
       })}
@@ -939,13 +970,12 @@ export default function Levels() {
     router.replace(`/levels?difficulty=${difficulty}`);
   };
 
+  const { C, scheme, toggle } = useAppTheme();
+
   return (
-    <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
-      <View style={styles.overlay} />
-      <View style={styles.orb1} />
-      <View style={styles.orb2} />
+    <View style={[styles.bg, { backgroundColor: C.bg }]}>
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
 
         {!selectedCategory ? (
           <ScrollView
@@ -959,35 +989,28 @@ export default function Levels() {
             ]}
           >
             <View style={styles.topActions}>
-              <Pressable onPress={() => router.push('/coins')} style={styles.coinPill}>
-                <Ionicons name="logo-bitcoin" size={16} color={Theme.warn} />
-                <Text style={styles.coinText}>{state.coins}</Text>
-              </Pressable>
+              <View style={styles.topLeftGroup}>
+                <Pressable onPress={() => router.back()} style={[styles.topActionBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+                  <Ionicons name="chevron-back" size={20} color={C.ink} />
+                </Pressable>
+                <Pressable onPress={() => router.push('/coins')} style={[styles.coinPill, { backgroundColor: C.surface, borderColor: C.divider }]}>
+                  <Ionicons name="logo-bitcoin" size={16} color={Theme.warn} />
+                  <Text style={[styles.coinText, { color: C.ink }]}>{state.coins}</Text>
+                </Pressable>
+              </View>
 
               <View style={styles.topActionGroup}>
-                <Pressable onPress={() => router.push('/settings')} style={styles.topActionBtn}>
-                  <Ionicons name="settings" size={18} color={Theme.primary} />
+                <Pressable onPress={toggle} style={[styles.topActionBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+                  <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={18} color={C.ink} />
                 </Pressable>
 
-                <Pressable onPress={() => router.push('/leaderboard')} style={styles.topActionBtn}>
-                  <Ionicons name="trophy" size={18} color={Theme.warn} />
-                </Pressable>
-
-                <Pressable onPress={() => router.push('/friends')} style={styles.topActionBtn}>
-                  <Ionicons name="people" size={18} color={Theme.primary} />
-                </Pressable>
-
-                <Pressable onPress={() => router.push('/battle')} style={styles.topActionBtn}>
+                <Pressable onPress={() => router.push('/battle')} style={[styles.topActionBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
                   <Ionicons name="flash" size={18} color={Theme.danger} />
-                </Pressable>
-
-                <Pressable onPress={() => router.push('/profile')} style={styles.topActionBtn}>
-                  <Ionicons name="person" size={18} color={Theme.textDim} />
                 </Pressable>
               </View>
             </View>
 
-            <View style={styles.titlePill}>
+            <View style={[styles.titlePill, { backgroundColor: Theme.primary, borderColor: C.surface }]}>
               <Text style={styles.titleText}>EXPLORE MANY THEMES</Text>
               <Text style={styles.titleSubText}>
                 {DIFFICULTIES[difficulty].label} has its own category set
@@ -1025,36 +1048,40 @@ export default function Levels() {
               },
             ]}
           >
-            <View style={styles.levelHeader}>
-              <Pressable onPress={backToCategories} style={styles.backBtn}>
-                <Ionicons name="chevron-back" size={22} color="#fff" />
-              </Pressable>
+            <View style={styles.topActions}>
+              <View style={styles.topLeftGroup}>
+                <Pressable onPress={backToCategories} style={[styles.topActionBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+                  <Ionicons name="chevron-back" size={20} color={C.ink} />
+                </Pressable>
+                <Pressable onPress={() => router.push('/coins')} style={[styles.coinPill, { backgroundColor: C.surface, borderColor: C.divider }]}>
+                  <Ionicons name="logo-bitcoin" size={16} color={Theme.warn} />
+                  <Text style={[styles.coinText, { color: C.ink }]}>{state.coins}</Text>
+                </Pressable>
+              </View>
 
-              <View style={styles.levelHeaderIcon}>
+              <View style={styles.topActionGroup}>
+                <Pressable onPress={toggle} style={[styles.topActionBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+                  <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={18} color={C.ink} />
+                </Pressable>
+
+                <Pressable onPress={() => router.push('/battle')} style={[styles.topActionBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+                  <Ionicons name="flash" size={18} color={Theme.danger} />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={[styles.levelHeader, { backgroundColor: C.surface, borderColor: C.divider }]}>
+              <View style={[styles.levelHeaderIcon, { backgroundColor: C.bg }]}>
                 <CategorySvgIcon name={selectedCategory.name} size={48} />
               </View>
 
               <View style={styles.levelHeaderText}>
-                <Text style={styles.levelHeaderTitle}>{selectedCategory.name}</Text>
-                <Text style={styles.levelHeaderSub}>
+                <Text style={[styles.levelHeaderTitle, { color: C.ink }]}>{selectedCategory.name}</Text>
+                <Text style={[styles.levelHeaderSub, { color: C.muted }]}>
                   {DIFFICULTIES[difficulty].label} levels with growing grids
                 </Text>
               </View>
 
-              <View style={styles.headerActions}>
-                <Pressable onPress={() => router.push('/shop')} style={styles.headerCoinPill}>
-                  <Ionicons name="logo-bitcoin" size={13} color="#9c096d" />
-                  <Text style={styles.headerCoinText}>{state.coins}</Text>
-                </Pressable>
-
-                <Pressable onPress={() => router.push('/settings')} style={styles.headerActionBtn}>
-                  <Ionicons name="settings" size={16} color="#fff" />
-                </Pressable>
-
-                <Pressable onPress={() => router.push('/battle')} style={styles.headerActionBtn}>
-                  <Ionicons name="flash" size={16} color="#fff" />
-                </Pressable>
-              </View>
             </View>
 
             <DifficultyTabs active={difficulty} onChange={onDifficultyChange} />
@@ -1079,32 +1106,32 @@ export default function Levels() {
                         `/game?id=${selectedCategory.baseId}&categoryKey=${selectedCategory.id}&title=${encodeURIComponent(selectedCategory.name)}&difficulty=${difficulty}&level=${level}`
                       )
                     }
-                    style={[styles.levelCard, completed && styles.levelCardDone, !unlocked && styles.levelCardLocked]}
+                    style={[styles.levelCard, { backgroundColor: C.surface, borderColor: C.divider }, completed && styles.levelCardDone, !unlocked && styles.levelCardLocked]}
                   >
                     <View style={styles.levelCardTop}>
-                      <View style={styles.levelNumberCircle}>
+                      <View style={[styles.levelNumberCircle, { backgroundColor: C.primary || '#D94F2B', borderColor: withAlpha(C.primary || '#D94F2B', 0.35) }]}>
                         <Text style={styles.levelNumber}>{level}</Text>
                       </View>
 
-                      <View style={styles.levelStatusPill}>
-                        <Text style={styles.levelStatusText}>
+                      <View style={[styles.levelStatusPill, { backgroundColor: completed ? withAlpha(C.success || '#4CC38A', 0.14) : unlocked ? withAlpha(C.primary || '#D94F2B', 0.12) : withAlpha(C.muted || '#8A8480', 0.14), borderColor: completed ? withAlpha(C.success || '#4CC38A', 0.30) : unlocked ? withAlpha(C.primary || '#D94F2B', 0.28) : C.divider }]}>
+                        <Text style={[styles.levelStatusText, { color: completed ? C.success || '#4CC38A' : unlocked ? C.primary || '#D94F2B' : C.muted }]}>
                           {completed ? 'DONE' : unlocked ? 'PLAY' : 'LOCK'}
                         </Text>
                       </View>
                     </View>
 
-                    <Text style={styles.levelCardTitle}>Level {level}</Text>
-                    <Text style={styles.levelCardMeta}>Grid {grid}×{grid} • {need} words</Text>
+                    <Text style={[styles.levelCardTitle, { color: C.ink }]}>Level {level}</Text>
+                    <Text style={[styles.levelCardMeta, { color: C.muted }]}>Grid {grid}×{grid} • {need} words</Text>
 
                     <View style={styles.levelProgressTrack}>
-                      <View style={[styles.levelProgressFill, { width: progressWidth as any }]} />
+                      <View style={[styles.levelProgressFill, { width: progressWidth as any, backgroundColor: C.success || '#4CC38A' }]} />
                     </View>
 
-                    <Text style={styles.levelFoundText}>{Math.min(found, need)}/{need} found</Text>
+                    <Text style={[styles.levelFoundText, { color: C.muted }]}>{Math.min(found, need)}/{need} found</Text>
 
                     {unlocked && (
                       <View style={styles.levelActionRow}>
-                        <View style={styles.levelMiniBtn}>
+                        <View style={[styles.levelMiniBtn, { backgroundColor: C.primary || '#D94F2B' }]}>
                           <Text style={styles.levelMiniBtnText}>PLAY</Text>
                         </View>
                         <Pressable
@@ -1114,7 +1141,7 @@ export default function Levels() {
                               `/battle?id=${selectedCategory.baseId}&categoryKey=${selectedCategory.id}&title=${encodeURIComponent(selectedCategory.name)}&difficulty=${difficulty}&level=${level}`
                             );
                           }}
-                          style={[styles.levelMiniBtn, styles.levelBattleBtn]}
+                          style={[styles.levelMiniBtn, styles.levelBattleBtn, { backgroundColor: C.warning || '#FFD23F' }]}
                         >
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                             <Ionicons name="flash" size={12} color="#0D0500" />
@@ -1130,43 +1157,20 @@ export default function Levels() {
           </ScrollView>
         )}
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   bg: {
     flex: 1,
-    backgroundColor: '#0D0500',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(13,5,0,0.82)',
-  },
-  orb1: {
-    position: 'absolute',
-    top: -60,
-    left: -60,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: 'rgba(255,100,0,0.13)',
-  },
-  orb2: {
-    position: 'absolute',
-    bottom: 80,
-    right: -50,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,60,0,0.09)',
   },
   safeArea: {
     flex: 1,
   },
   content: {
     paddingTop: 10,
-    paddingBottom: 34,
+    paddingBottom: 128,
   },
   topActions: {
     width: '100%',
@@ -1178,12 +1182,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     flexWrap: 'nowrap',
   },
+  topLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
   topActionGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 5,
-    flexShrink: 1,
+    flexShrink: 0,
   },
   coinPill: {
     minWidth: 68,
@@ -1191,20 +1201,19 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     paddingHorizontal: 8,
-    ...GlassEffects.medium,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
     shadowColor: Theme.warn,
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowOffset: { width: 0, height: 5 },
     shadowRadius: 7,
-    elevation: 6,
+    elevation: 4,
     flexShrink: 0,
   },
   coinText: {
-    color: Theme.warn,
     fontSize: 13,
     fontWeight: '900',
   },
@@ -1212,60 +1221,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    ...GlassEffects.light,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: Theme.primary,
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.12,
     shadowOffset: { width: 0, height: 5 },
     shadowRadius: 7,
-    elevation: 6,
+    elevation: 4,
     flexShrink: 0,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
-  },
-  headerCoinPill: {
-    minWidth: 58,
-    maxWidth: 76,
-    height: 34,
-    borderRadius: 17,
-    paddingHorizontal: 7,
-    backgroundColor: '#fff4d8',
-    borderWidth: 1.5,
-    borderColor: '#fff4b8',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  headerCoinText: {
-    color: '#9c096d',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  headerActionBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#ff7a00',
-    borderWidth: 1.5,
-    borderColor: '#fff4b8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 5,
-    elevation: 5,
   },
   titlePill: {
     borderRadius: 999,
@@ -1308,18 +1272,17 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 50,
     borderRadius: 22,
-    ...GlassEffects.light,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: Theme.primary,
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 5,
-    elevation: 5,
+    elevation: 4,
     position: 'relative',
   },
   diffBtnText: {
-    color: Theme.primary,
     fontSize: 13,
     fontWeight: '900',
   },
@@ -1339,17 +1302,17 @@ const styles = StyleSheet.create({
   categoryCard: {
     minHeight: 176,
     borderRadius: 14,
-    ...GlassEffects.medium,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 14,
     paddingBottom: 13,
     paddingHorizontal: 9,
     shadowColor: Theme.primary,
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.12,
     shadowOffset: { width: 0, height: 5 },
     shadowRadius: 7,
-    elevation: 7,
+    elevation: 5,
     overflow: 'hidden',
   },
   progressTop: {
@@ -1431,9 +1394,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     minHeight: 88,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,244,216,0.98)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.88)',
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -1441,31 +1402,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 8,
-    elevation: 7,
-    overflow: 'hidden',
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#ff7a00',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 6,
-    elevation: 5,
-    flexShrink: 0,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
   },
   levelHeaderIcon: {
     width: 54,
     height: 54,
     borderRadius: 15,
-    backgroundColor: '#fff9e9',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -1475,13 +1421,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   levelHeaderTitle: {
-    color: '#2e2f3d',
     fontSize: 18,
     fontWeight: '900',
   },
   levelHeaderSub: {
     marginTop: 3,
-    color: '#697083',
     fontSize: 10,
     fontWeight: '700',
   },
@@ -1490,13 +1434,13 @@ const styles = StyleSheet.create({
   },
   levelCard: {
     borderRadius: 24,
-    ...GlassEffects.medium,
+    borderWidth: 1,
     padding: 16,
     shadowColor: Theme.primary,
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12,
-    elevation: 5,
+    elevation: 4,
   },
   levelCardTop: {
     flexDirection: 'row',
@@ -1540,13 +1484,11 @@ const styles = StyleSheet.create({
     color: Theme.success,
   },
   levelCardTitle: {
-    color: '#fff',
     fontSize: 15,
     fontWeight: '900',
     marginBottom: 2,
   },
   levelCardMeta: {
-    color: Theme.textDim,
     fontSize: 11,
     fontWeight: '700',
     marginBottom: 10,
@@ -1564,7 +1506,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.success,
   },
   levelFoundText: {
-    color: Theme.textDim,
     fontSize: 11,
     fontWeight: '700',
     marginBottom: 12,

@@ -8,6 +8,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { ScreenShell } from '../components/ScreenShell';
+import { useAppTheme } from '../lib/appTheme';
 import { CATEGORIES } from '../constants/categories';
 import {
   acceptBattleRoom,
@@ -302,17 +303,19 @@ export default function BattleArena() {
     }
   };
 
+  const { C } = useAppTheme();
+
   return (
     <ScreenShell title="Online Battle" subtitle="Word Search battles use your existing Supabase database">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
+        <View style={[styles.hero, { backgroundColor: C.surface, borderColor: C.divider }]}>
           <View style={styles.heroIcon}>
             <Ionicons name="flash" size={28} color="#fff" />
           </View>
 
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>Choose difficulty first</Text>
-            <Text style={styles.heroSub}>
+            <Text style={[styles.heroTitle, { color: C.ink }]}>Choose difficulty first</Text>
+            <Text style={[styles.heroSub, { color: C.muted }]}>
               When you tap Battle, a random level is selected automatically and saved in the battle room.
             </Text>
           </View>
@@ -330,6 +333,7 @@ export default function BattleArena() {
               key={d.id}
               style={[
                 styles.diffCard,
+                { backgroundColor: C.surface, borderColor: C.divider },
                 difficulty === d.id && {
                   backgroundColor: d.color,
                   borderColor: d.color,
@@ -337,15 +341,15 @@ export default function BattleArena() {
               ]}
               onPress={() => setDifficulty(d.id)}
             >
-              <Ionicons name={d.icon} size={22} color="#fff" />
-              <Text style={styles.diffLabel}>{d.label}</Text>
-              <Text style={styles.diffSub}>{d.sub}</Text>
+              <Ionicons name={d.icon} size={22} color={difficulty === d.id ? '#fff' : C.ink} />
+              <Text style={[styles.diffLabel, { color: difficulty === d.id ? '#fff' : C.ink }]}>{d.label}</Text>
+              <Text style={[styles.diffSub, { color: difficulty === d.id ? 'rgba(255,255,255,0.80)' : C.muted }]}>{d.sub}</Text>
             </AnimatedPressable>
           ))}
         </View>
 
         {loading ? (
-          <ActivityIndicator color="#fff" size="large" style={{ marginVertical: 30 }} />
+          <ActivityIndicator color={C.ink} size="large" style={{ marginVertical: 30 }} />
         ) : null}
 
         <Section title="Friends" count={friends.length} />
@@ -355,14 +359,14 @@ export default function BattleArena() {
         ) : null}
 
         {friends.map((friend) => (
-          <View key={friend.uid} style={styles.friendCard}>
+          <View key={friend.uid} style={[styles.friendCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{initials(friend.displayName)}</Text>
             </View>
 
             <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{friend.displayName}</Text>
-              <Text style={styles.cardMeta}>Random {difficulty.toUpperCase()} Word Search</Text>
+              <Text style={[styles.cardTitle, { color: C.ink }]}>{friend.displayName}</Text>
+              <Text style={[styles.cardMeta, { color: C.muted }]}>Random {difficulty.toUpperCase()} Word Search</Text>
             </View>
 
             <AnimatedPressable
@@ -422,7 +426,7 @@ export default function BattleArena() {
               room={room}
               uid={uid}
               busy={busyId === room.id}
-              footer={<Text style={styles.waiting}>Waiting for opponent...</Text>}
+              footer={<Text style={[styles.waiting, { color: C.muted }]}>Waiting for opponent...</Text>}
             />
           ))
         )}
@@ -488,16 +492,16 @@ export default function BattleArena() {
           style={styles.completedHeader}
           onPress={() => setShowCompleted((v) => !v)}
         >
-          <Text style={styles.sectionTitle}>Completed Battles</Text>
+          <Text style={[styles.sectionTitle, { color: C.ink }]}>Completed Battles</Text>
 
-          <View style={styles.sectionBadge}>
-            <Text style={styles.sectionBadgeText}>{rooms.completed.length}</Text>
+          <View style={[styles.sectionBadge, { backgroundColor: C.divider }]}>
+            <Text style={[styles.sectionBadgeText, { color: C.ink }]}>{rooms.completed.length}</Text>
           </View>
 
           <Ionicons
             name={showCompleted ? 'chevron-up' : 'chevron-down'}
             size={18}
-            color="rgba(255,255,255,0.65)"
+            color={C.muted}
           />
         </AnimatedPressable>
 
@@ -533,20 +537,22 @@ function Section({
   count: number;
   compact?: boolean;
 }) {
+  const { C } = useAppTheme();
   return (
     <View style={[styles.section, compact && styles.sectionCompact]}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionBadge}>
-        <Text style={styles.sectionBadgeText}>{count}</Text>
+      <Text style={[styles.sectionTitle, { color: C.ink }]}>{title}</Text>
+      <View style={[styles.sectionBadge, { backgroundColor: C.divider }]}>
+        <Text style={[styles.sectionBadgeText, { color: C.ink }]}>{count}</Text>
       </View>
     </View>
   );
 }
 
 function Empty({ text }: { text: string }) {
+  const { C } = useAppTheme();
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyText}>{text}</Text>
+    <View style={[styles.empty, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.divider }]}>
+      <Text style={[styles.emptyText, { color: C.muted }]}>{text}</Text>
     </View>
   );
 }
@@ -562,24 +568,25 @@ function RoomCard({
   busy: boolean;
   footer?: React.ReactNode;
 }) {
+  const { C } = useAppTheme();
   const opponent = uid === room.player1Id ? room.player2Name : room.player1Name;
 
   return (
-    <View style={styles.roomCard}>
+    <View style={[styles.roomCard, { backgroundColor: C.surface, borderColor: C.divider }]}>
       <View style={styles.roomRow}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials(opponent)}</Text>
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>{opponent}</Text>
-          <Text style={styles.cardMeta}>
+          <Text style={[styles.cardTitle, { color: C.ink }]}>{opponent}</Text>
+          <Text style={[styles.cardMeta, { color: C.muted }]}>
             {room.categoryTitle} • {room.difficulty.toUpperCase()} • Lv {room.level}
           </Text>
           <Text style={styles.status}>{room.status.replace('_', ' ').toUpperCase()}</Text>
         </View>
 
-        {busy ? <ActivityIndicator color="#fff" size="small" /> : null}
+        {busy ? <ActivityIndicator color={C.ink} size="small" /> : null}
       </View>
 
       {footer ?? null}
