@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, StyleSheet, Text, View } from 'react-native';
+import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { STRIPE_COLORS } from '../constants/categories';
 import { buildPuzzle } from '../lib/puzzle';
@@ -20,6 +20,8 @@ type WordGridProps = {
   opponentFound?: FoundEntry[];
   hintCell?: Point | null;
   onFound: (entry: FoundEntry) => void;
+  onSelectStart?: () => void;
+  onSelectError?: () => void;
   width: number;
   size?: number;
 };
@@ -31,6 +33,8 @@ export function WordGrid({
   opponentFound = [],
   hintCell,
   onFound,
+  onSelectStart,
+  onSelectError,
   width,
   size = 10,
 }: WordGridProps) {
@@ -54,6 +58,9 @@ export function WordGrid({
 
   const foundRef = useRef<FoundEntry[]>(found);
   const onFoundRef = useRef(onFound);
+  const onSelectStartRef = useRef(onSelectStart);
+  const onSelectErrorRef = useRef(onSelectError);
+  const errorFlashAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Include opponent-found words too, because live battle uses one shared board.
@@ -64,6 +71,14 @@ export function WordGrid({
   useEffect(() => {
     onFoundRef.current = onFound;
   }, [onFound]);
+
+  useEffect(() => {
+    onSelectStartRef.current = onSelectStart;
+  }, [onSelectStart]);
+
+  useEffect(() => {
+    onSelectErrorRef.current = onSelectError;
+  }, [onSelectError]);
 
   const clamp = (num: number, min: number, max: number) => {
     return Math.max(min, Math.min(max, num));
@@ -204,6 +219,9 @@ export function WordGrid({
     const matchedWord =
       placementMatch?.word?.toUpperCase().trim() || directMatch || reverseMatch;
 
+    const hasSelection = fixed.start[0] !== fixed.end[0] || fixed.start[1] !== fixed.end[1];
+
+    let wordFound = false;
     if (matchedWord) {
       const alreadyFound = foundRef.current.some(
         (entry) => entry.word.toUpperCase().trim() === matchedWord
@@ -230,6 +248,7 @@ export function WordGrid({
               : fixed.end,
           color,
         });
+        wordFound = true;
       }
     }
 
@@ -237,6 +256,14 @@ export function WordGrid({
     setDragEnd(null);
     dragStartRef.current = null;
     dragEndRef.current = null;
+
+    if (!wordFound && hasSelection) {
+      onSelectErrorRef.current?.();
+      Animated.sequence([
+        Animated.timing(errorFlashAnim, { toValue: 1, duration: 80, useNativeDriver: true }),
+        Animated.timing(errorFlashAnim, { toValue: 0, duration: 380, useNativeDriver: true }),
+      ]).start();
+    }
   };
 
   const panResponder = useRef(
@@ -249,6 +276,8 @@ export function WordGrid({
       onPanResponderGrant: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
         const point = pointFromTouch(locationX, locationY);
+
+        onSelectStartRef.current?.();
 
         dragStartRef.current = point;
         dragEndRef.current = point;
@@ -294,6 +323,37 @@ export function WordGrid({
       {...panResponder.panHandlers}
     >
       <Svg pointerEvents="none" width={width} height={width} style={StyleSheet.absoluteFill}>
+        {dragStart && dragEnd && (() => {
+          const fixed = normalizeLine(dragStart, dragEnd);
+          const start = centerOf(fixed.start);
+          const end = centerOf(fixed.end);
+          return (
+            <>
+              <Line
+                key="active-drag-glow"
+                x1={start.x}
+                y1={start.y}
+                x2={end.x}
+                y2={end.y}
+                stroke="#FDBB2D"
+                strokeWidth={Math.max(22, cell * 0.96)}
+                strokeLinecap="round"
+                opacity={0.18}
+              />
+              <Line
+                key="active-drag-line"
+                x1={start.x}
+                y1={start.y}
+                x2={end.x}
+                y2={end.y}
+                stroke="#FFD000"
+                strokeWidth={Math.max(10, cell * 0.68)}
+                strokeLinecap="round"
+                opacity={0.85}
+              />
+            </>
+          );
+        })()}
         {opponentFound.map((entry) => {
           const start = centerOf(entry.start);
           const end = centerOf(entry.end);
@@ -329,6 +389,11 @@ export function WordGrid({
           );
         })}
       </Svg>
+
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFillObject, styles.errorFlash, { opacity: errorFlashAnim }]}
+      />
 
       {puzzle.grid.map((rowLetters, rowIndex) => (
         <View key={`row-${rowIndex}`} style={styles.row}>
@@ -371,6 +436,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     borderRadius: 22,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.85)',
   },
   row: {
     flexDirection: 'row',
@@ -380,7 +447,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cellSelected: {
-    backgroundColor: 'rgba(253,187,45,0.22)',
+    backgroundColor: 'rgba(253,187,45,0.38)',
     borderRadius: 12,
   },
   cellHint: {
@@ -392,9 +459,15 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   letterSelected: {
-    color: '#5B3500',
+    color: '#3A1E00',
+    transform: [{ scale: 1.08 }],
   },
   letterHint: {
     color: '#FF4D8D',
+  },
+  errorFlash: {
+    backgroundColor: 'rgba(255,50,50,0.22)',
+    borderRadius: 22,
+    zIndex: 5,
   },
 });

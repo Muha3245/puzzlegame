@@ -19,10 +19,10 @@ const LOGO_H      = TILE_SIZE * 2 + TILE_GAP;
 
 // Each tile: letter, tile background color, glow color
 const TILES = [
-  { letter: 'W', bg: '#FF7A00', glow: '#FF7A00' },
-  { letter: 'O', bg: '#FF6040', glow: '#FF6040' },
-  { letter: 'R', bg: '#FFD23F', glow: '#FFD23F' },
-  { letter: 'D', bg: '#4CC38A', glow: '#4CC38A' },
+  { letter: 'P', bg: '#FF7A00', glow: '#FF7A00' },
+  { letter: 'U', bg: '#E94B8C', glow: '#E94B8C' },
+  { letter: 'Z', bg: '#FFD23F', glow: '#FFD23F' },
+  { letter: 'Z', bg: '#4CC38A', glow: '#4CC38A' },
 ];
 
 function LogoMark() {
@@ -255,10 +255,10 @@ export function Splash({ onDone }: Props) {
 
       {/* App name */}
       <Animated.Text style={[s.title, { opacity: titleOp, transform: [{ translateY: titleY }] }]}>
-        WordPuzzle
+        Puzzle Arena
       </Animated.Text>
       <Animated.Text style={[s.sub, { opacity: subOp }]}>
-        FIND · SOLVE · LEVEL UP
+        PLAY · BATTLE · WIN
       </Animated.Text>
 
       {/* Progress bar */}

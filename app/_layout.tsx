@@ -53,8 +53,7 @@ export default function RootLayout() {
     if (!pendingBattle) return;
     setAcceptBusy(true);
     try {
-      await acceptBattleRoom(pendingBattle);
-      const room = pendingBattle;
+      const room = await acceptBattleRoom(pendingBattle);
       setPendingBattle(null);
       // Use replace, not push — push stacks the game screen behind the still-visible
       // modal on winner/other screens, leaving the user frozen on "Joining…".
@@ -93,8 +92,8 @@ export default function RootLayout() {
         <Stack.Screen name="leaderboard" />
         <Stack.Screen name="login" />
         <Stack.Screen name="shop" options={{ presentation: 'transparentModal', animation: 'fade' }} />
-        <Stack.Screen name="coins" options={{ animationEnabled: true }} />
-        <Stack.Screen name="settings" options={{ animationEnabled: true }} />
+        <Stack.Screen name="coins" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="help" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         <Stack.Screen name="winner" />
       </Stack>

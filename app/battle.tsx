@@ -3,7 +3,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,7 +17,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CATEGORIES } from '../constants/categories';
 import { Theme } from '../constants/theme';
 import {
   acceptBattleRoom,
@@ -30,8 +29,10 @@ import {
   rejectBattleRoom,
   subscribeToMyBattleList,
 } from '../lib/online';
+import { getRandomBattleLevel } from '../lib/battleHelpers';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { SkeletonCard, SkeletonSection } from '../components/SkeletonLoader';
+import { DifficultyPickerModal } from '../components/DifficultyPickerModal';
 
 const BG_URI = 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?auto=format&fit=crop&w=1200&q=90';
 
@@ -49,22 +50,6 @@ function initials(name: string) {
 }
 
 export default function BattleArena() {
-  const params = useLocalSearchParams<{
-    id?: string;
-    categoryKey?: string;
-    title?: string;
-    difficulty?: string;
-    level?: string;
-  }>();
-
-  const category = CATEGORIES.find((c) => c.id === params.id) ?? CATEGORIES[0];
-  const categoryId = params.id || category.id;
-  const categoryKey = params.categoryKey || category.id;
-  const categoryTitle = typeof params.title === 'string' ? decodeURIComponent(params.title) : category.name;
-  const difficulty = params.difficulty || 'easy';
-  const level = Math.max(1, Number(params.level || 1));
-  const hasSelectedLevel = Boolean(params.level && params.id);
-
   const [uid, setUid] = useState<string | null>(null);
   const [friends, setFriends] = useState<PublicUser[]>([]);
   const [rooms, setRooms] = useState<RoomBucket>(emptyBuckets);
@@ -72,6 +57,8 @@ export default function BattleArena() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [rematchSentIds, setRematchSentIds] = useState<Set<string>>(new Set());
+  const [diffModalFriend, setDiffModalFriend] = useState<PublicUser | null>(null);
+  const [diffModalRoom, setDiffModalRoom] = useState<BattleRoom | null>(null);
   const prevIncomingRef = useRef<string[]>([]);
   const [toastMsg, setToastMsg] = useState('');
   const toastAnim = useRef(new Animated.Value(0)).current;
@@ -97,11 +84,6 @@ export default function BattleArena() {
     });
     return map;
   }, [rooms.incoming, rooms.active, rooms.outgoing, uid]);
-
-  const titleLine = useMemo(() => {
-    if (!hasSelectedLevel) return 'Choose a friend and start a live room';
-    return `${categoryTitle} • ${difficulty.toUpperCase()} • Level ${level}`;
-  }, [hasSelectedLevel, categoryTitle, difficulty, level]);
 
   const load = useCallback(async () => {
     try {
@@ -144,29 +126,43 @@ export default function BattleArena() {
     prevIncomingRef.current = rooms.incoming.map((r) => r.id);
   }, [rooms.incoming]);
 
-  const challenge = async (friend: PublicUser) => {
-    if (!hasSelectedLevel) {
-      Alert.alert('Select level first', 'Open Levels, select any level, then tap Battle Friend.');
-      return;
-    }
-
+  const handleFriendDifficultySelect = async (difficulty: string) => {
+    if (!diffModalFriend) return;
+    const friend = diffModalFriend;
+    const levelData = getRandomBattleLevel(difficulty);
+    setBusyId(friend.uid);
     try {
-      setBusyId(friend.uid);
-      const room = await createBattleRoom({
-        friend,
-        categoryId,
-        categoryKey,
-        categoryTitle,
-        difficulty,
-        level,
-      });
-      // Navigate immediately — player 1 waits in the game lobby for opponent to accept.
-      // Do NOT await load() here: subscribeToMyBattleList fires anyway, and the delay
-      // caused the screen to never navigate (bug fix).
-      showToast(`⚡ Entering battle lobby…`);
+      const room = await createBattleRoom({ friend, ...levelData });
+      setDiffModalFriend(null);
+      showToast('⚡ Entering battle lobby…');
       openRoom(room);
     } catch (error: any) {
       Alert.alert('Challenge error', error?.message || 'Unable to send battle challenge.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRematchDifficultySelect = async (difficulty: string) => {
+    if (!diffModalRoom) return;
+    const room = diffModalRoom;
+    const friend: PublicUser = {
+      uid: uid === room.player1Id ? room.player2Id : room.player1Id,
+      displayName: uid === room.player1Id ? room.player2Name : room.player1Name,
+      coins: 0,
+      totalScore: 0,
+      levelsCompleted: 0,
+    };
+    const levelData = getRandomBattleLevel(difficulty);
+    setBusyId(room.id);
+    try {
+      const nextRoom = await createBattleRoom({ friend, ...levelData });
+      setRematchSentIds((prev) => new Set([...prev, room.id]));
+      setDiffModalRoom(null);
+      showToast('🔄 Rematch sent! Entering battle…');
+      openRoom(nextRoom);
+    } catch (error: any) {
+      Alert.alert('Rematch error', error?.message || 'Unable to create rematch.');
     } finally {
       setBusyId(null);
     }
@@ -207,62 +203,6 @@ export default function BattleArena() {
     );
   };
 
-  const rematch = async (room: BattleRoom) => {
-    const friend: PublicUser = {
-      uid: uid === room.player1Id ? room.player2Id : room.player1Id,
-      displayName: uid === room.player1Id ? room.player2Name : room.player1Name,
-      coins: 0,
-      totalScore: 0,
-      levelsCompleted: 0,
-    };
-
-    try {
-      setBusyId(room.id);
-      const nextRoom = await createBattleRoom({
-        friend,
-        categoryId: room.categoryId,
-        categoryKey: room.categoryKey,
-        categoryTitle: room.categoryTitle,
-        difficulty: room.difficulty,
-        level: room.level,
-      });
-      setRematchSentIds((prev) => new Set([...prev, room.id]));
-      showToast('🔄 Rematch sent! Entering battle…');
-      openRoom(nextRoom);
-    } catch (error: any) {
-      Alert.alert('Rematch error', error?.message || 'Unable to create rematch.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const nextLevelBattle = async (room: BattleRoom) => {
-    const friend: PublicUser = {
-      uid: uid === room.player1Id ? room.player2Id : room.player1Id,
-      displayName: uid === room.player1Id ? room.player2Name : room.player1Name,
-      coins: 0,
-      totalScore: 0,
-      levelsCompleted: 0,
-    };
-
-    try {
-      setBusyId(room.id);
-      const nextRoom = await createBattleRoom({
-        friend,
-        categoryId: room.categoryId,
-        categoryKey: room.categoryKey,
-        categoryTitle: room.categoryTitle,
-        difficulty: room.difficulty,
-        level: Math.min(room.level + 1, 8),
-      });
-      showToast(`⬆️ Next level challenge sent!`);
-      openRoom(nextRoom);
-    } catch (error: any) {
-      Alert.alert('Next level error', error?.message || 'Unable to create next level battle.');
-    } finally {
-      setBusyId(null);
-    }
-  };
 
   return (
     <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
@@ -282,7 +222,7 @@ export default function BattleArena() {
                 <View style={styles.bigBadge}><Text style={styles.bigBadgeText}>{totalBadge}</Text></View>
               )}
             </View>
-            <Text style={styles.sub}>{titleLine}</Text>
+            <Text style={styles.sub}>Challenge a friend — pick a difficulty!</Text>
           </View>
         </View>
 
@@ -311,24 +251,16 @@ export default function BattleArena() {
         ) : (
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-            {/* ── 1. Choose Level card — always at top ── */}
+            {/* ── 1. How to Battle card ── */}
             <AnimatedEntry from="bottom" delay={0}>
             <View style={styles.infoCard}>
               <View style={styles.infoIconRow}>
                 <Ionicons name="flash" size={22} color={Theme.warn} />
-                <Text style={styles.infoTitle}>
-                  {hasSelectedLevel ? `⚡ ${categoryTitle} • ${difficulty.toUpperCase()} • Lv ${level}` : 'How to Battle'}
-                </Text>
+                <Text style={styles.infoTitle}>How to Battle</Text>
               </View>
-              {!hasSelectedLevel && (
-                <Text style={styles.infoText}>
-                  Go to Levels → pick a category → tap <Text style={{ color: Theme.warn, fontWeight: '900' }}>Battle</Text> on any level card. Both players solve the exact same puzzle. Whoever finds the most words wins coins!
-                </Text>
-              )}
-              <Pressable onPress={() => router.push('/levels')} style={styles.primaryBtn}>
-                <Ionicons name="grid-outline" size={16} color="#fff" />
-                <Text style={styles.primaryBtnText}>{hasSelectedLevel ? 'Change Level' : 'Choose Level'}</Text>
-              </Pressable>
+              <Text style={styles.infoText}>
+                Tap <Text style={{ color: Theme.warn, fontWeight: '900' }}>⚡ Battle</Text> on a friend, choose a difficulty, and a random level is picked for both of you. Whoever finds the most words wins coins!
+              </Text>
             </View>
             </AnimatedEntry>
 
@@ -373,9 +305,13 @@ export default function BattleArena() {
                 <View style={styles.avatar}><Text style={styles.avatarText}>{initials(friend.displayName)}</Text></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{friend.displayName}</Text>
-                  <Text style={styles.cardMeta}>{hasSelectedLevel ? titleLine : 'Select a level first'}</Text>
+                  <Text style={styles.cardMeta}>Tap to battle</Text>
                 </View>
-                <Pressable disabled={busyId === friend.uid} onPress={() => challenge(friend)} style={[styles.challengeBtn, !hasSelectedLevel && styles.disabledBtn]}>
+                <Pressable
+                  disabled={busyId === friend.uid}
+                  onPress={() => setDiffModalFriend(friend)}
+                  style={styles.challengeBtn}
+                >
                   {busyId === friend.uid ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
@@ -460,8 +396,7 @@ export default function BattleArena() {
                     room={room}
                     uid={uid}
                     rematchSent={rematchSentIds.has(room.id)}
-                    onRematch={() => rematch(room)}
-                    onNext={() => nextLevelBattle(room)}
+                    onRematch={() => setDiffModalRoom(room)}
                     busy={busyId === room.id}
                   />
                   </AnimatedEntry>
@@ -473,6 +408,17 @@ export default function BattleArena() {
           </ScrollView>
         )}
       </SafeAreaView>
+
+      <DifficultyPickerModal
+        visible={!!diffModalFriend}
+        onClose={() => setDiffModalFriend(null)}
+        onSelect={handleFriendDifficultySelect}
+      />
+      <DifficultyPickerModal
+        visible={!!diffModalRoom}
+        onClose={() => setDiffModalRoom(null)}
+        onSelect={handleRematchDifficultySelect}
+      />
     </ImageBackground>
   );
 }
@@ -509,10 +455,10 @@ function RoomCard({ room, uid, footer, busy }: { room: BattleRoom; uid: string |
 }
 
 function CompletedRoomCard({
-  room, uid, onRematch, onNext, busy, rematchSent,
+  room, uid, onRematch, busy, rematchSent,
 }: {
   room: BattleRoom; uid: string | null; onRematch: () => void;
-  onNext: () => void; busy?: boolean; rematchSent?: boolean;
+  busy?: boolean; rematchSent?: boolean;
 }) {
   const opponentName = uid === room.player1Id ? room.player2Name : room.player1Name;
   const iWon = room.winnerId && room.winnerId === uid;
@@ -545,14 +491,9 @@ function CompletedRoomCard({
           <Text style={styles.rematchSentText}>Rematch sent — waiting for opponent</Text>
         </View>
       ) : (
-        <View style={styles.actionsRow}>
-          <Pressable onPress={onRematch} disabled={busy} style={[styles.acceptBtn, busy && { opacity: 0.6 }]}>
-            <Text style={styles.btnText}>Rematch</Text>
-          </Pressable>
-          <Pressable onPress={onNext} disabled={busy} style={[styles.nextBtn, busy && { opacity: 0.6 }]}>
-            <Text style={styles.btnText}>Next Level</Text>
-          </Pressable>
-        </View>
+        <Pressable onPress={onRematch} disabled={busy} style={[styles.acceptBtn, busy && { opacity: 0.6 }]}>
+          <Text style={styles.btnText}>🔄 Rematch</Text>
+        </Pressable>
       )}
     </View>
   );

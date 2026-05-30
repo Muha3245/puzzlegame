@@ -426,6 +426,8 @@ export async function createBattleRoom({
   const me = await getMyProfile();
   if (!me) throw new Error('Please login first.');
 
+  const now = new Date().toISOString();
+
   const { data, error } = await supabase
     .from('battle_rooms')
     .insert({
@@ -439,13 +441,40 @@ export async function createBattleRoom({
       category_title: categoryTitle,
       difficulty,
       level,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     })
     .select('*')
     .single();
 
   if (error) throw error;
-  return mapBattleRoom(data);
+
+  const room = mapBattleRoom(data);
+
+  // Create the sender/player-1 ready row immediately. Previously player 1 only
+  // created this row after navigation reached /game. If that navigation was slow,
+  // cancelled, or hidden behind the winner/rematch modal, player 2 could accept
+  // and then stay forever on "Joining..." because only one ready row existed.
+  await supabase
+    .from('battle_room_players')
+    .upsert(
+      {
+        room_id: room.id,
+        user_id: me.uid,
+        display_name: me.displayName,
+        score: 0,
+        words_found: 0,
+        total_words: 0,
+        elapsed_seconds: 0,
+        is_ready: true,
+        is_finished: false,
+        has_quit: false,
+        updated_at: now,
+      },
+      { onConflict: 'room_id,user_id' },
+    )
+    .throwOnError();
+
+  return room;
 }
 
 export async function getBattleRooms(): Promise<{
@@ -488,9 +517,11 @@ export async function acceptBattleRoom(room: BattleRoom) {
   const { error } = await supabase
     .from('battle_rooms')
     .update({ status: 'accepted', updated_at: new Date().toISOString() })
-    .eq('id', room.id);
+    .eq('id', room.id)
+    .in('status', ['pending', 'accepted', 'in_progress']);
   if (error) throw error;
   await ensureBattlePlayerRows(room.id);
+  return (await getBattleRoom(room.id)) ?? room;
 }
 
 export async function rejectBattleRoom(room: BattleRoom) {
@@ -664,7 +695,7 @@ export function subscribeToMyBattleList(userId: string, onChange: () => void) {
 // and check player2_id client-side, which is 100% reliable.
 export function subscribeToIncomingBattles(userId: string, onNewRoom: (room: BattleRoom) => void) {
   const channel = supabase
-    .channel(`battle-incoming-${userId}`)
+    .channel(`battle-incoming-${userId}-${Date.now()}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'battle_rooms' },

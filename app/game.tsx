@@ -177,12 +177,20 @@ export default function Game() {
   const [battleWinnerId, setBattleWinnerId] = useState<string | null>(null);
   const [battleFinishedReason, setBattleFinishedReason] = useState<'completed' | 'timeout' | 'quit' | null>(null);
   const [oppFlash, setOppFlash] = useState<string | null>(null); // last word opponent found
+  const [foundPopups, setFoundPopups] = useState<
+    { id: number; word: string; color: string; anim: Animated.Value }[]
+  >([]);
 
   // Stable refs so onFound closure never has stale uid / send fn
   const myUidRef          = useRef<string | null>(null);
   const sendBattleScore   = useRef<((d: BattleBroadcastPayload) => void) | null>(null);
   const goWinnerRef       = useRef<() => void>(() => {});
   const endBattleCalledRef = useRef(false); // prevents duplicate endBattleNow calls
+  const resultNavigatedRef = useRef(false); // prevents winner screen double-replace glitches
+  const foundPopupIdRef    = useRef(0);
+  // Words saved before this session started — used to detect level replays.
+  // Set once per level load so mid-session progress updates don't affect it.
+  const levelStartProgressRef = useRef(state.progress[progressKey] ?? 0);
 
   // Animations
   const bannerPulse   = useRef(new Animated.Value(0)).current;
@@ -369,12 +377,16 @@ export default function Game() {
 
   // ── Reset on level change ──
   useEffect(() => {
+    // Snapshot progress BEFORE resetting — tells us if this level was already beaten.
+    levelStartProgressRef.current = state.progress[progressKey] ?? 0;
     setFound([]); setHintCell(null); setBanner(null); setWon(false);
     setRewardCoins(0); setRewardOptions([]); setSelectedReward(null); setCanContinue(false);
     setTimeLeft(diffCfg.timerSec); setFrozen(false); setTimedOut(false);
     setCurrentPlayer(1); setScores({ 1: 0, 2: 0 }); setTurnsLeft(levelWords.length);
     setTurnFound([]);
     endBattleCalledRef.current = false; // reset guard for new game
+    resultNavigatedRef.current = false;
+    setFoundPopups([]);
     if (isLiveBattle) {
       // Don't start timer yet — wait until both players are in the room
       setWaitingForOpponent(true);
@@ -485,6 +497,22 @@ export default function Game() {
     ).start();
   };
 
+  const showFoundWordAnimation = useCallback((word: string, color: string) => {
+    const id = ++foundPopupIdRef.current;
+    const anim = new Animated.Value(0);
+    setFoundPopups((prev) => [...prev.slice(-3), { id, word, color, anim }]);
+
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(anim, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }),
+      ]),
+      Animated.delay(420),
+      Animated.timing(anim, { toValue: 2, duration: 360, useNativeDriver: true }),
+    ]).start(() => {
+      setFoundPopups((prev) => prev.filter((item) => item.id !== id));
+    });
+  }, []);
+
   const pickRewardBox = (index: number) => {
     if (selectedReward !== null) return;
     const reward = rewardOptions[index] ?? 0;
@@ -514,6 +542,7 @@ export default function Game() {
     playGameSound('wordFound', state.settings.sound);
     if (state.settings.haptics) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setBanner({ text: PRAISE[Math.floor(Math.random() * PRAISE.length)], color: entry.color });
+    showFoundWordAnimation(up, entry.color);
     setTimeout(() => setBanner(null), 1150);
     setWordsFound(progressKey, isLiveBattle ? newCombinedCount : newFound.length);
 
@@ -552,13 +581,16 @@ export default function Game() {
 
     if (isLevelComplete) {
       stopTimer();
-      const options = isLiveBattle ? [] : makeRewardOptions();
+      // Only award coins on first completion. Replays (levelStartProgressRef already
+      // at full count) skip the reward boxes so the player can't farm coins.
+      const isFirstCompletion = levelStartProgressRef.current < levelWords.length;
+      const options = isLiveBattle || !isFirstCompletion ? [] : makeRewardOptions();
       setRewardOptions(options);
       setSelectedReward(null);
       setRewardCoins(0);
-      setCanContinue(isLiveBattle || options.length === 0);
+      setCanContinue(isLiveBattle || !isFirstCompletion || options.length === 0);
 
-      if (options.length === 0 && !isLiveBattle) {
+      if (options.length === 0 && !isLiveBattle && isFirstCompletion) {
         completeOnlineLevel({ categoryKey, difficulty, level: levelNumber, foundWords: newFound.length, rewardCoins: 0 }).catch(() => {});
       }
 
@@ -598,6 +630,7 @@ export default function Game() {
     opponentBattleState?.userId,
     opponentFoundEntries.length,
     endBattleNow,
+    showFoundWordAnimation,
   ]);
 
   // Finish a live battle when the shared board is complete. This covers the case
@@ -681,22 +714,22 @@ export default function Game() {
   const goWinner = () => {
     if (isLiveBattle) {
       const myName   = myBattleState?.displayName ?? 'You';
-      const oppName  = opponentBattleState?.displayName ?? 'Opponent';
+      const opponentId = opponentBattleState?.userId ?? (battleRoom
+        ? (myUidRef.current === battleRoom.player1Id ? battleRoom.player2Id : battleRoom.player1Id)
+        : '');
+      const oppName  = opponentBattleState?.displayName
+        ?? (battleRoom ? (myUidRef.current === battleRoom.player1Id ? battleRoom.player2Name : battleRoom.player1Name) : 'Opponent');
       const s1       = myLiveScore;
       const s2       = opponentLiveScore;
       const myWords  = found.length;
       const oppWords = Math.max(opponentBattleState?.wordsFound ?? 0, opponentFoundEntries.length);
-      const iWon     = battleWinnerId
-        ? battleWinnerId === myUidRef.current
-        : myWords > oppWords || (myWords === oppWords && s1 >= s2);
-      // Coin rewards: winner gets +60, loser loses -25 (per difficulty scaling)
+      const isDraw   = battleWinnerId === null && myWords === oppWords;
+      const iWon     = battleWinnerId ? battleWinnerId === myUidRef.current : (!isDraw && myWords > oppWords);
+      // Coin rewards: winner gets +60, loser loses -25 (per difficulty scaling). Draw has no coin change.
       const diffBonus = difficulty === 'medium' ? 10 : difficulty === 'hard' ? 25 : difficulty === 'pro' ? 50 : 0;
-      const coinDelta = iWon ? 60 + diffBonus : -(25 + Math.floor(diffBonus / 2));
-      const opponentId = opponentBattleState?.userId ?? (battleRoom
-        ? (myUidRef.current === battleRoom.player1Id ? battleRoom.player2Id : battleRoom.player1Id)
-        : '');
+      const coinDelta = isDraw ? 0 : iWon ? 60 + diffBonus : -(25 + Math.floor(diffBonus / 2));
       router.replace(
-        `/winner?winner=${encodeURIComponent(iWon ? myName : oppName)}&p1=${encodeURIComponent(myName)}&p2=${encodeURIComponent(oppName)}&s1=${s1}&s2=${s2}&coins=${coinDelta}&id=${category.id}&categoryKey=${categoryKey}&title=${encodeURIComponent(displayTitle)}&difficulty=${difficulty}&level=${levelNumber}&isBattle=1&opponentId=${encodeURIComponent(opponentId || '')}&opponentName=${encodeURIComponent(oppName)}`
+        `/winner?winner=${encodeURIComponent(isDraw ? 'Tie' : iWon ? myName : oppName)}&p1=${encodeURIComponent(myName)}&p2=${encodeURIComponent(oppName)}&s1=${s1}&s2=${s2}&coins=${coinDelta}&id=${category.id}&categoryKey=${categoryKey}&title=${encodeURIComponent(displayTitle)}&difficulty=${difficulty}&level=${levelNumber}&isBattle=1&opponentId=${encodeURIComponent(opponentId || '')}&opponentName=${encodeURIComponent(oppName)}`
       );
       return;
     }
@@ -714,8 +747,9 @@ export default function Game() {
 
   // Auto-navigate to results when live battle ends (no manual tap needed)
   useEffect(() => {
-    if (!won || !isLiveBattle || !canContinue) return;
-    const t = setTimeout(() => goWinnerRef.current(), 2000);
+    if (!won || !isLiveBattle || !canContinue || resultNavigatedRef.current) return;
+    resultNavigatedRef.current = true;
+    const t = setTimeout(() => goWinnerRef.current(), 1200);
     return () => clearTimeout(t);
   }, [won, isLiveBattle, canContinue]);
 
@@ -846,10 +880,32 @@ export default function Game() {
               opponentFound={isLiveBattle ? opponentFoundEntries : []}
               hintCell={hintCell}
               onFound={onFound}
+              onSelectStart={() => playGameSound('tap', state.settings.sound)}
               width={gridMax}
               size={gridSize}
             />
           </View>
+
+          {/* Matched word fly-up animation */}
+          {foundPopups.map((item) => {
+            const translateY = item.anim.interpolate({ inputRange: [0, 1, 2], outputRange: [18, -18, -58] });
+            const scale = item.anim.interpolate({ inputRange: [0, 1, 2], outputRange: [0.7, 1.12, 0.92] });
+            const opacity = item.anim.interpolate({ inputRange: [0, 0.2, 1.55, 2], outputRange: [0, 1, 1, 0] });
+            return (
+              <Animated.View
+                key={item.id}
+                pointerEvents="none"
+                style={[
+                  styles.foundWordPop,
+                  { backgroundColor: item.color, opacity, transform: [{ translateY }, { scale }] },
+                ]}
+              >
+                <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                <Text style={styles.foundWordPopText}>{item.word}</Text>
+                <Text style={styles.foundWordScore}>+10</Text>
+              </Animated.View>
+            );
+          })}
 
           {/* Progress bar */}
           <View style={styles.progressRow}>
@@ -1017,8 +1073,16 @@ export default function Game() {
               {/* No reward scenario */}
               {!isMulti && !isLiveBattle && !timedOut && rewardOptions.length === 0 && (
                 <View style={styles.earnedPill}>
-                  <Ionicons name="star" size={14} color={Theme.warn} />
-                  <Text style={styles.earnedText}>Level unlocked!</Text>
+                  <Ionicons
+                    name={levelStartProgressRef.current >= levelWords.length ? 'checkmark-done-circle' : 'star'}
+                    size={14}
+                    color={Theme.warn}
+                  />
+                  <Text style={styles.earnedText}>
+                    {levelStartProgressRef.current >= levelWords.length
+                      ? 'Already completed — no reward'
+                      : 'Level unlocked!'}
+                  </Text>
                 </View>
               )}
 
@@ -1155,6 +1219,9 @@ const styles = StyleSheet.create({
 
   // Grid
   gridGlass: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 20, padding: 7, borderWidth: 1, borderColor: 'rgba(255,150,0,0.22)', shadowColor: Theme.primary, shadowOpacity: 0.35, shadowOffset: { width: 0, height: 8 }, shadowRadius: 18, elevation: 10 },
+  foundWordPop: { position: 'absolute', top: '56%', alignSelf: 'center', zIndex: 20, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, shadowColor: '#000', shadowOpacity: 0.28, shadowOffset: { width: 0, height: 5 }, shadowRadius: 12, elevation: 8 },
+  foundWordPopText: { color: '#fff', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+  foundWordScore: { color: '#fff', fontSize: 12, fontWeight: '900', opacity: 0.9 },
 
   // Progress
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, width: '80%' },

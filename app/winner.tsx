@@ -9,7 +9,10 @@ import { ScreenLayout } from '../components/ui/ScreenLayout';
 import { HighlightText } from '../components/HighlightText';
 import { Theme, GlassEffects } from '../constants/theme';
 import { useAppState } from '../lib/storage';
-import { acceptBattleRoom, BattleRoom, createBattleRoom, getBattleRooms, PublicUser } from '../lib/online';
+import { playGameSound } from '../lib/audio';
+import { acceptBattleRoom, BattleRoom, createBattleRoom, getBattleRooms, getCurrentUserId, PublicUser, subscribeToIncomingBattles } from '../lib/online';
+import { getRandomBattleLevel } from '../lib/battleHelpers';
+import { DifficultyPickerModal } from '../components/DifficultyPickerModal';
 
 export default function Winner() {
   const params = useLocalSearchParams<{
@@ -18,10 +21,12 @@ export default function Winner() {
     id?: string; categoryKey?: string; difficulty?: string; level?: string;
     isBattle?: string; title?: string; opponentId?: string; opponentName?: string;
   }>();
-  const { addCoins } = useAppState();
+  const { addCoins, state } = useAppState();
   const [rematchBusy, setRematchBusy] = useState(false);
+  const [showDiffPicker, setShowDiffPicker] = useState(false);
   const [incomingRematch, setIncomingRematch] = useState<BattleRoom | null>(null);
   const [acceptRematchBusy, setAcceptRematchBusy] = useState(false);
+  const incomingShownRef = useRef<Set<string>>(new Set());
 
   const winner    = params.winner ?? 'Player 1';
   const p1        = params.p1 ?? 'Player 1';
@@ -44,6 +49,8 @@ export default function Winner() {
   ).current;
 
   useEffect(() => {
+    playGameSound(iWon || isTie || !isBattle ? 'win' : 'tap', state.settings.sound);
+
     // Reward/deduct coins on mount
     if (coinDelta !== 0) addCoins(coinDelta);
 
@@ -110,29 +117,51 @@ export default function Winner() {
 
   const iconColor = isBattle && !iWon && !isTie ? Theme.danger : Theme.warn;
 
-  // Poll for incoming rematch requests from the opponent every 2.5 s.
-  // Realtime INSERT events are unreliable immediately after screen navigation
-  // (websocket reconnects), so REST polling is the safe fallback.
+  // Realtime + polling fallback for rematch requests. Winner/loser result screens
+  // can mount right when Supabase reconnects, so relying on only INSERT events made
+  // one side miss the rematch banner.
   useEffect(() => {
     if (!isBattle || !params.opponentId) return;
+    let alive = true;
+    let unsub: (() => void) | undefined;
+
+    const acceptCandidate = (room: BattleRoom) => {
+      if (!alive) return;
+      if (room.player1Id !== params.opponentId) return;
+      if (room.status !== 'pending') return;
+      if (incomingShownRef.current.has(room.id)) return;
+      incomingShownRef.current.add(room.id);
+      setIncomingRematch(room);
+    };
+
+    getCurrentUserId().then((uid) => {
+      if (!alive || !uid) return;
+      unsub = subscribeToIncomingBattles(uid, acceptCandidate);
+    }).catch(() => {});
+
     const check = async () => {
       try {
         const rooms = await getBattleRooms();
-        const hit = rooms.incoming.find((r) => r.player1Id === params.opponentId);
-        if (hit) setIncomingRematch(hit);
+        const hit = rooms.incoming.find((r) => r.player1Id === params.opponentId && r.status === 'pending');
+        if (hit) acceptCandidate(hit);
       } catch {}
     };
+
     check();
-    const iv = setInterval(check, 2500);
-    return () => clearInterval(iv);
+    const iv = setInterval(check, 1200);
+    return () => {
+      alive = false;
+      unsub?.();
+      clearInterval(iv);
+    };
   }, [isBattle, params.opponentId]);
 
   const acceptIncomingRematch = async () => {
+    playGameSound('tap', state.settings.sound);
     if (!incomingRematch) return;
     setAcceptRematchBusy(true);
     try {
-      await acceptBattleRoom(incomingRematch);
-      const room = incomingRematch;
+      const room = await acceptBattleRoom(incomingRematch);
       setIncomingRematch(null);
       router.replace(
         `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`,
@@ -144,13 +173,8 @@ export default function Winner() {
     }
   };
 
-  const sendSameLevelRematch = async () => {
-    if (!params.opponentId) {
-      Alert.alert('Rematch error', 'Opponent information is missing. Please start the rematch from Battle Arena.');
-      router.replace('/battle');
-      return;
-    }
-
+  const handleRematchDifficultySelect = async (difficulty: string) => {
+    if (!params.opponentId) return;
     const opponent: PublicUser = {
       uid: params.opponentId,
       displayName: params.opponentName || p2 || 'Opponent',
@@ -158,20 +182,11 @@ export default function Winner() {
       totalScore: 0,
       levelsCompleted: 0,
     };
-
+    const levelData = getRandomBattleLevel(difficulty);
+    setRematchBusy(true);
     try {
-      setRematchBusy(true);
-      const room = await createBattleRoom({
-        friend: opponent,
-        categoryId: params.id ?? '',
-        categoryKey: params.categoryKey ?? params.id ?? '',
-        categoryTitle: typeof params.title === 'string' ? decodeURIComponent(params.title) : 'Battle',
-        difficulty: params.difficulty ?? 'easy',
-        level: Number(params.level ?? 1),
-      });
-
-      // Immediately enter the game waiting lobby — the opponent receives the
-      // global BattleNotificationModal (in _layout.tsx) with Accept/Fight button.
+      const room = await createBattleRoom({ friend: opponent, ...levelData });
+      setShowDiffPicker(false);
       router.replace(
         `/game?id=${room.categoryId}&categoryKey=${room.categoryKey}&title=${encodeURIComponent(room.categoryTitle)}&difficulty=${room.difficulty}&level=${room.level}&mode=battle&roomId=${room.id}`,
       );
@@ -281,29 +296,36 @@ export default function Winner() {
           <>
             <Pressable
               disabled={rematchBusy}
-              onPress={sendSameLevelRematch}
+              onPress={() => {
+                if (!params.opponentId) {
+                  Alert.alert('Rematch error', 'Opponent information is missing.');
+                  return;
+                }
+                playGameSound('tap', state.settings.sound);
+                setShowDiffPicker(true);
+              }}
               style={[styles.primaryBtn, rematchBusy && { opacity: 0.65 }]}
             >
               <Ionicons name="refresh" size={18} color="#fff" />
               <Text style={styles.primaryBtnText}>
-                {rematchBusy ? 'Sending...' : 'Rematch Same Level'}
+                {rematchBusy ? 'Sending...' : '⚡ Rematch'}
               </Text>
             </Pressable>
 
             <Pressable
-              onPress={() => router.replace('/levels')}
+              onPress={() => router.replace('/battle')}
               style={styles.secondaryBtn}
             >
-              <Ionicons name="grid-outline" size={18} color={Theme.textDim} />
-              <Text style={styles.secondaryBtnText}>Choose Category / Level</Text>
+              <Ionicons name="flash-outline" size={18} color={Theme.textDim} />
+              <Text style={styles.secondaryBtnText}>Battle Arena</Text>
             </Pressable>
 
             <Pressable
-              onPress={() => router.replace('/battle')}
+              onPress={() => router.replace('/levels')}
               style={styles.ghostBtn}
             >
-              <Ionicons name="flash-outline" size={16} color={Theme.primary} />
-              <Text style={styles.ghostBtnText}>Battle Arena</Text>
+              <Ionicons name="grid-outline" size={16} color={Theme.primary} />
+              <Text style={styles.ghostBtnText}>Choose Level</Text>
             </Pressable>
           </>
         ) : (
@@ -338,6 +360,12 @@ export default function Winner() {
           </>
         )}
       </ScrollView>
+
+      <DifficultyPickerModal
+        visible={showDiffPicker}
+        onClose={() => setShowDiffPicker(false)}
+        onSelect={handleRematchDifficultySelect}
+      />
     </ScreenLayout>
   );
 }
