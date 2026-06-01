@@ -14,6 +14,7 @@ import {
   acceptBattleRoom,
   BattleRoom,
   createBattleRoom,
+  getAuthStatus,
   getBattleRooms,
   getCurrentUserId,
   getMyFriends,
@@ -129,12 +130,24 @@ export default function BattleArena() {
       let active = true;
       let unsub: (() => void) | undefined;
 
-      load();
+      // Online battles need a real account — block guests / signed-out users.
+      getAuthStatus()
+        .then((status) => {
+          if (!active) return;
+          if (!status.loggedIn) {
+            Alert.alert(
+              'Sign in required',
+              'Create an account or sign in to play online battles. Guest mode is offline only.',
+              [
+                { text: 'Not now', style: 'cancel', onPress: () => router.back() },
+                { text: 'Sign in', onPress: () => router.replace('/login') },
+              ],
+            );
+            return;
+          }
 
-      getCurrentUserId()
-        .then((current) => {
-          if (!active || !current) return;
-          unsub = subscribeToMyBattleList(current, load);
+          load();
+          if (status.uid) unsub = subscribeToMyBattleList(status.uid, load);
         })
         .catch(() => {});
 
@@ -288,6 +301,8 @@ export default function BattleArena() {
       coins: 0,
       totalScore: 0,
       levelsCompleted: 0,
+      battlesWon: 0,
+      battlesLost: 0,
     };
 
     try {
@@ -416,114 +431,6 @@ export default function BattleArena() {
           ))
         )}
 
-        <Section title="Sent Requests" count={rooms.outgoing.length} />
-
-        {rooms.outgoing.length === 0 ? (
-          <Empty text="No pending sent battles." />
-        ) : (
-          rooms.outgoing.map((room) => (
-            <RoomCard
-              key={room.id}
-              room={room}
-              uid={uid}
-              busy={busyId === room.id}
-              footer={<Text style={[styles.waiting, { color: C.muted }]}>Waiting for opponent...</Text>}
-            />
-          ))
-        )}
-
-        <View style={styles.sectionWithAction}>
-          <Section title="Active Battles" count={activeRooms.length} compact />
-
-          {activeRooms.length > 0 ? (
-            <AnimatedPressable
-              disabled={deletingAllActive || busyId === 'delete-all-active'}
-              style={[
-                styles.deleteAllIconBtn,
-                (deletingAllActive || busyId === 'delete-all-active') && styles.disabledBtn,
-              ]}
-              onPress={deleteAllActiveBattles}
-            >
-              {deletingAllActive || busyId === 'delete-all-active' ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Ionicons name="trash-outline" size={18} color="#fff" />
-              )}
-            </AnimatedPressable>
-          ) : null}
-        </View>
-
-        {activeRooms.length === 0 ? (
-          <Empty text="No active battles right now." />
-        ) : (
-          activeRooms.map((room) => (
-            <RoomCard
-              key={room.id}
-              room={room}
-              uid={uid}
-              busy={busyId === room.id}
-              footer={
-                <View style={styles.iconActions}>
-                  <AnimatedPressable
-                    disabled={busyId === room.id || busyId === 'delete-all-active'}
-                    style={[styles.iconActionBtn, styles.continueIconBtn]}
-                    onPress={() => openRoom(room)}
-                  >
-                    <Ionicons name="play" size={18} color="#fff" />
-                  </AnimatedPressable>
-
-                  <AnimatedPressable
-                    disabled={busyId === room.id || busyId === 'delete-all-active'}
-                    style={[styles.iconActionBtn, styles.deleteIconBtn]}
-                    onPress={() => deleteActiveBattle(room)}
-                  >
-                    {busyId === room.id ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <Ionicons name="trash-outline" size={18} color="#fff" />
-                    )}
-                  </AnimatedPressable>
-                </View>
-              }
-            />
-          ))
-        )}
-
-        <AnimatedPressable
-          style={styles.completedHeader}
-          onPress={() => setShowCompleted((v) => !v)}
-        >
-          <Text style={[styles.sectionTitle, { color: C.ink }]}>Completed Battles</Text>
-
-          <View style={[styles.sectionBadge, { backgroundColor: C.divider }]}>
-            <Text style={[styles.sectionBadgeText, { color: C.ink }]}>{rooms.completed.length}</Text>
-          </View>
-
-          <Ionicons
-            name={showCompleted ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={C.muted}
-          />
-        </AnimatedPressable>
-
-        {showCompleted &&
-          (rooms.completed.length === 0 ? (
-            <Empty text="Completed battles will appear here." />
-          ) : (
-            rooms.completed.slice(0, 15).map((room) => (
-              <RoomCard
-                key={room.id}
-                room={room}
-                uid={uid}
-                busy={busyId === room.id}
-                footer={
-                  <AnimatedPressable style={styles.continueBtn} onPress={() => rematch(room)}>
-                    <Text style={styles.continueText}>Random Rematch</Text>
-                  </AnimatedPressable>
-                }
-              />
-            ))
-          ))}
       </ScrollView>
     </ScreenShell>
   );

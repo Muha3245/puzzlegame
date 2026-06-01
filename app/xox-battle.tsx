@@ -19,6 +19,7 @@ import { useAppTheme } from '../lib/appTheme';
 import {
   acceptXoxRoom,
   createXoxRoom,
+  getAuthStatus,
   getCurrentUserId,
   getMyFriends,
   getXoxRooms,
@@ -76,12 +77,24 @@ export default function XoxBattleScreen() {
       let active = true;
       let unsub: (() => void) | undefined;
 
-      load();
+      // Online XOX needs a real account — block guests / signed-out users.
+      getAuthStatus()
+        .then((status) => {
+          if (!active) return;
+          if (!status.loggedIn) {
+            Alert.alert(
+              'Sign in required',
+              'Create an account or sign in to play online XOX. Guest mode is offline only.',
+              [
+                { text: 'Not now', style: 'cancel', onPress: () => router.back() },
+                { text: 'Sign in', onPress: () => router.replace('/login') },
+              ],
+            );
+            return;
+          }
 
-      getCurrentUserId()
-        .then((current) => {
-          if (!active || !current) return;
-          unsub = subscribeToMyXoxList(current, load);
+          load();
+          if (status.uid) unsub = subscribeToMyXoxList(status.uid, load);
         })
         .catch(() => {});
 
@@ -234,79 +247,6 @@ export default function XoxBattleScreen() {
             />
           ))
         )}
-
-        {/* ── Outgoing ── */}
-        <SectionHeader title="Sent Challenges" count={rooms.outgoing.length} />
-        {rooms.outgoing.length === 0 ? (
-          <EmptyRow text="No pending sent challenges." />
-        ) : (
-          rooms.outgoing.map((room) => (
-            <XoxRoomCard
-              key={room.id}
-              room={room}
-              uid={uid}
-              busy={busyId === room.id}
-              footer={
-                <AnimatedPressable
-                  style={styles.continueBtn}
-                  onPress={() => openRoom(room)}
-                >
-                  <Ionicons name="time-outline" size={15} color="#0B1020" />
-                  <Text style={styles.continueText}>Waiting... (tap to view)</Text>
-                </AnimatedPressable>
-              }
-            />
-          ))
-        )}
-
-        {/* ── Active ── */}
-        <SectionHeader title="Active Games" count={rooms.active.length} />
-        {rooms.active.length === 0 ? (
-          <EmptyRow text="No active games right now." />
-        ) : (
-          rooms.active.map((room) => (
-            <XoxRoomCard
-              key={room.id}
-              room={room}
-              uid={uid}
-              busy={busyId === room.id}
-              footer={
-                <AnimatedPressable
-                  style={styles.continueBtn}
-                  onPress={() => openRoom(room)}
-                >
-                  <Ionicons name="play" size={15} color="#0B1020" />
-                  <Text style={styles.continueText}>Continue</Text>
-                </AnimatedPressable>
-              }
-            />
-          ))
-        )}
-
-        {/* ── Completed (collapsible) ── */}
-        <AnimatedPressable
-          style={styles.completedHeader}
-          onPress={() => setShowCompleted((v) => !v)}
-        >
-          <Text style={[styles.sectionTitle, { color: C.ink }]}>Completed Games</Text>
-          <View style={[styles.badge, { backgroundColor: C.divider }]}>
-            <Text style={[styles.badgeText, { color: C.ink }]}>{rooms.completed.length}</Text>
-          </View>
-          <Ionicons
-            name={showCompleted ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={C.muted}
-          />
-        </AnimatedPressable>
-
-        {showCompleted &&
-          (rooms.completed.length === 0 ? (
-            <EmptyRow text="Completed games will appear here." />
-          ) : (
-            rooms.completed.slice(0, 12).map((room) => (
-              <XoxRoomCard key={room.id} room={room} uid={uid} busy={false} />
-            ))
-          ))}
 
       </ScrollView>
     </ScreenShell>

@@ -89,65 +89,6 @@ const DIFFICULTIES: Record<
   },
 };
 
-const CATEGORY_NAMES: Record<DifficultyId, string[]> = {
-  easy: [
-    'Animals',
-    'Colors',
-    'Cities',
-    'Nature',
-    'House',
-    'Adjectives',
-    'Food',
-    'Fruits',
-    'Family',
-    'Weather',
-    'Shapes',
-    'Toys',
-  ],
-  medium: [
-    'Sports',
-    'Music',
-    'School',
-    'Body',
-    'Jobs',
-    'Transport',
-    'Space',
-    'Ocean',
-    'Numbers',
-    'Time',
-    'Clothes',
-    'Vegetables',
-  ],
-  hard: [
-    'TV Shows',
-    'Countries',
-    'Monuments',
-    'Actors & Directors',
-    'Writers',
-    'History',
-    'Tools',
-    'Emotions',
-    'Planets',
-    'Sea Life',
-    'Math',
-    'Games',
-  ],
-  pro: [
-    'Mythology',
-    'Science',
-    'Technology',
-    'Business',
-    'Adventure',
-    'Mystery',
-    'Fantasy',
-    'Pirates',
-    'Robots',
-    'Dinosaurs',
-    'Magic',
-    'Treasure',
-  ],
-};
-
 function getDifficulty(value?: string): DifficultyId {
   if (value === 'medium' || value === 'hard' || value === 'pro') return value;
   return 'easy';
@@ -166,31 +107,30 @@ function slugify(value: string) {
 }
 
 function getCategorySet(difficulty: DifficultyId): GameCategory[] {
+  // Drive the list straight from the real word categories so each tile's NAME
+  // always matches the WORDS the game will load. (Previously fantasy names were
+  // paired with categories by array index, so e.g. the "Weather" tile loaded
+  // Travel words.) Difficulty only changes grid size / word counts, not theme.
   const base = CATEGORIES.length ? CATEGORIES : [];
-  const names = CATEGORY_NAMES[difficulty];
 
-  return names.map((name, index) => {
-    const source = base[index % base.length] ?? base[0];
-
-    return {
-      id: `${difficulty}-${slugify(name)}-${index + 1}`,
-      name,
-      baseId: source.id,
-      baseIndex: index,
-      price:
-        difficulty === 'easy'
-          ? index >= 9
+  return base.map((cat, index) => ({
+    id: `${difficulty}-${cat.id}`,
+    name: cat.name,
+    baseId: cat.id,
+    baseIndex: index,
+    // First 12 themes free on every difficulty; the rest are premium, scaling
+    // a little with difficulty so there's still something to unlock.
+    price:
+      index < 12
+        ? undefined
+        : (difficulty === 'easy'
             ? 75
-            : undefined
-          : difficulty === 'medium'
-            ? index >= 6
-              ? 100 + (index - 6) * 25
-              : undefined
-            : difficulty === 'hard'
-              ? 125 + Math.max(0, index - 4) * 25
-              : 200 + index * 25,
-    };
-  });
+            : difficulty === 'medium'
+              ? 125
+              : difficulty === 'hard'
+                ? 175
+                : 250) + (index - 12) * 15,
+  }));
 }
 
 function getCategoryType(name: string) {

@@ -37,6 +37,8 @@ import { Theme } from "../constants/theme";
 import * as Haptics from "expo-haptics";
 import { playGameSound, playWordCompleted, playCoinSound, playLevelUnlock } from "../lib/audio";
 import { Confetti } from "../components/Confetti";
+import { FlyingLetters } from "../components/FlyingLetters";
+import { AnimatedEntry } from "../components/AnimatedEntry";
 import {
   BattleBroadcastPayload,
   BattleChatMessage,
@@ -47,6 +49,7 @@ import {
   getBattlePlayers,
   getBattleRoom,
   getCurrentUserId,
+  getPhotosByIds,
   subscribeToBattleRoom,
   subscribeToBattleScore,
   subscribeToBattleChat,
@@ -56,6 +59,7 @@ import {
 } from "../lib/online";
 import { buildPuzzle } from "../lib/puzzle";
 import { useAppState } from "../lib/storage";
+import { Image } from "expo-image";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -124,17 +128,26 @@ function makeUniqueLevelWords(
   totalWords: number,
   levelIndex: number,
 ) {
-  const baseWords = categoryWords
-    .map((w) => w.toUpperCase().trim())
-    .filter(Boolean);
-  const globalWords = CATEGORIES.flatMap((cat) => cat.words)
-    .map((w) => w.toUpperCase().trim())
-    .filter(Boolean);
-  const pool = Array.from(new Set([...baseWords, ...globalWords]));
-  const start = levelIndex * totalWords;
+  // Use ONLY this category's own words so every level stays on-theme. Words are
+  // offset per level so different levels show different subsets; when the
+  // category has fewer unique words than levels, subsets cycle/repeat (still
+  // always on-theme). Previously the global word pool leaked other categories'
+  // words into higher levels.
+  const pool = Array.from(
+    new Set(categoryWords.map((w) => w.toUpperCase().trim()).filter(Boolean)),
+  );
+  if (pool.length === 0) return [];
+
+  const count = Math.min(totalWords, pool.length);
+  const start = (levelIndex * count) % pool.length;
   const selected: string[] = [];
-  for (let i = 0; i < pool.length && selected.length < totalWords; i++) {
-    selected.push(pool[(start + i) % pool.length]);
+  const seen = new Set<string>();
+  for (let i = 0; i < pool.length && selected.length < count; i++) {
+    const word = pool[(start + i) % pool.length];
+    if (!seen.has(word)) {
+      seen.add(word);
+      selected.push(word);
+    }
   }
   return selected;
 }
@@ -259,6 +272,12 @@ export default function Game() {
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(
     null,
   );
+  // Letters that fly up to the top when a word is matched (cosmetic).
+  const [flyingWord, setFlyingWord] = useState<{
+    word: string;
+    color: string;
+    key: number;
+  } | null>(null);
   const [won, setWon] = useState(false);
   const [rewardCoins, setRewardCoins] = useState(0);
   const [rewardOptions, setRewardOptions] = useState<number[]>([]);
@@ -284,6 +303,9 @@ export default function Game() {
   const [myUid, setMyUid] = useState<string | null>(null);
   const [battleRoom, setBattleRoom] = useState<BattleRoom | null>(null);
   const [battlePlayers, setBattlePlayers] = useState<BattlePlayerState[]>([]);
+  const [playerPhotos, setPlayerPhotos] = useState<
+    Record<string, string | null>
+  >({});
   const [waitingForOpponent, setWaitingForOpponent] = useState(isLiveBattle);
   const [opponentFound, setOpponentFound] = useState(0); // track opponent word count for flash
   const [opponentFoundEntries, setOpponentFoundEntries] = useState<
@@ -773,6 +795,41 @@ export default function Game() {
     }
   }, [battlePlayers, isLiveBattle, waitingForOpponent]);
 
+  // End battle immediately when the opponent quits mid-game.
+  // quitBattleRoom() sets has_quit=true in battle_room_players; the 1.2 s
+  // poll calls loadBattleRoom → setBattlePlayers, which triggers this effect.
+  useEffect(() => {
+    if (!isLiveBattle || !roomId || battleFinishedReason || !myUid) return;
+    const opponent = battlePlayers.find((p) => p.userId !== myUid);
+    if (opponent?.hasQuit) {
+      endBattleNow({ winnerId: myUid, reason: "quit" }).catch(() => {});
+    }
+  }, [battlePlayers, isLiveBattle, roomId, battleFinishedReason, myUid, endBattleNow]);
+
+  // Fetch both players' profile photos from the users table once their ids are
+  // known. Avatars are not stored on battle_room_players, so we look them up.
+  useEffect(() => {
+    if (!isLiveBattle) return;
+    const ids = battlePlayers.map((p) => p.userId).filter(Boolean);
+    if (myUid) ids.push(myUid);
+    const missing = ids.filter((id) => !(id in playerPhotos));
+    if (missing.length === 0) return;
+
+    let alive = true;
+    getPhotosByIds(missing)
+      .then((map) => {
+        if (!alive) return;
+        // Mark all requested ids as resolved (null included) to avoid refetching.
+        const resolved: Record<string, string | null> = {};
+        missing.forEach((id) => (resolved[id] = map[id] ?? null));
+        setPlayerPhotos((prev) => ({ ...prev, ...resolved }));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [battlePlayers, myUid, isLiveBattle, playerPhotos]);
+
   useEffect(() => {
     if (
       !isLiveBattle ||
@@ -954,6 +1011,8 @@ export default function Game() {
         color: entry.color,
       });
       setTimeout(() => setBanner(null), 1150);
+      // Fly the matched word's letters up toward the top of the screen.
+      setFlyingWord({ word: up, color: entry.color, key: Date.now() });
       setWordsFound(
         progressKey,
         isLiveBattle ? newCombinedCount : newFound.length,
@@ -1389,6 +1448,7 @@ export default function Game() {
                 score={myLiveScore}
                 words={found.length}
                 totalWords={levelWords.length}
+                photoURL={myUid ? playerPhotos[myUid] : null}
                 active
               />
               <View style={styles.multiVs}>
@@ -1400,6 +1460,11 @@ export default function Game() {
                 score={opponentLiveScore}
                 words={opponentBattleState?.wordsFound ?? 0}
                 totalWords={levelWords.length}
+                photoURL={
+                  opponentBattleState
+                    ? playerPhotos[opponentBattleState.userId]
+                    : null
+                }
                 active={false}
               />
             </View>
@@ -1691,7 +1756,18 @@ export default function Game() {
                     { borderColor: "rgba(255,150,0,0.5)" },
                   ]}
                 >
-                  <View style={styles.waitingDot} />
+                  {myUid && playerPhotos[myUid] ? (
+                    <View style={styles.playerAvatar}>
+                      <Image
+                        source={{ uri: playerPhotos[myUid]! }}
+                        style={styles.playerAvatarImage}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.waitingDot} />
+                  )}
                   <Text style={styles.waitingPlayerName} numberOfLines={1}>
                     {myBattleState?.displayName ?? "You"}
                   </Text>
@@ -1716,12 +1792,25 @@ export default function Game() {
                 >
                   {opponentBattleState ? (
                     <>
-                      <View
-                        style={[
-                          styles.waitingDot,
-                          { backgroundColor: Theme.success },
-                        ]}
-                      />
+                      {playerPhotos[opponentBattleState.userId] ? (
+                        <View style={styles.playerAvatar}>
+                          <Image
+                            source={{
+                              uri: playerPhotos[opponentBattleState.userId]!,
+                            }}
+                            style={styles.playerAvatarImage}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                          />
+                        </View>
+                      ) : (
+                        <View
+                          style={[
+                            styles.waitingDot,
+                            { backgroundColor: Theme.success },
+                          ]}
+                        />
+                      )}
                       <Text style={styles.waitingPlayerName} numberOfLines={1}>
                         {opponentBattleState.displayName}
                       </Text>
@@ -1763,8 +1852,23 @@ export default function Game() {
         {/* ── Win / timeout overlay ── */}
         {won && (
           <View style={styles.winOverlay}>
+            <AnimatedEntry from="scale" duration={460}>
             <View style={styles.winModal}>
-              {timedOut ? (
+              {battleFinishedReason === "quit" ? (
+                <>
+                  <View style={styles.winIconCircle}>
+                    <Ionicons
+                      name="exit-outline"
+                      size={46}
+                      color={Theme.warn}
+                    />
+                  </View>
+                  <Text style={styles.winTitle}>Opponent Left!</Text>
+                  <Text style={styles.winSub}>
+                    Your opponent quit the battle.{"\n"}You win by default!
+                  </Text>
+                </>
+              ) : timedOut ? (
                 <>
                   <View style={styles.winIconCircle}>
                     <Ionicons
@@ -1941,9 +2045,20 @@ export default function Game() {
                 <Text style={styles.secondaryBtnText}>Level Select</Text>
               </Pressable>
             </View>
+            </AnimatedEntry>
           </View>
         )}
       </SafeAreaView>
+
+      {/* Matched word letters fly up to the top of the screen */}
+      {flyingWord && (
+        <FlyingLetters
+          key={flyingWord.key}
+          word={flyingWord.word}
+          color={flyingWord.color}
+          onDone={() => setFlyingWord(null)}
+        />
+      )}
 
       {/* Confetti burst fires on normal level completion (not timeout, not mid-battle) */}
       <Confetti active={won && !timedOut && !isLiveBattle} />
@@ -2048,19 +2163,30 @@ function PlayerChip({
   words,
   totalWords,
   active,
+  photoURL,
 }: {
   name: string;
   score: number;
   words?: number;
   totalWords?: number;
   active: boolean;
+  photoURL?: string | null;
 }) {
   const initial = String(name || "P").trim().charAt(0).toUpperCase() || "P";
 
   return (
     <View style={[styles.playerChip, active && styles.playerChipActive]}>
       <View style={[styles.playerAvatar, active && styles.playerAvatarActive]}>
-        <Text style={styles.playerAvatarText}>{initial}</Text>
+        {photoURL ? (
+          <Image
+            source={{ uri: photoURL }}
+            style={styles.playerAvatarImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          <Text style={styles.playerAvatarText}>{initial}</Text>
+        )}
       </View>
 
       <View style={styles.playerInfo}>
@@ -2257,6 +2383,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.10)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
+  },
+  playerAvatarImage: {
+    width: 34,
+    height: 34,
   },
   playerAvatarActive: {
     backgroundColor: "rgba(255,216,122,0.22)",

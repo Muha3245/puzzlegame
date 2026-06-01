@@ -4,7 +4,23 @@
       "Bash(node \"c:\\\\laragon\\\\www\\\\my app\\\\puzzlegame\\\\scripts\\\\game-test-agent.mjs\")",
       "Bash(node scripts/game-test-agent.mjs)",
       "Bash(grep -v \"//\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\my app\\\\puzzlegame\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__computer",
+      "mcp__Claude_in_Chrome__javascript_tool",
+      "Bash(node -e \"const p=require\\('./package.json'\\); const d={...p.dependencies,...p.devDependencies}; ['expo-auth-session','expo-web-browser','expo-crypto','@react-native-google-signin/google-signin','expo-linking'].forEach\\(k=>console.log\\(k, d[k]||'—'\\)\\);\")",
+      "Bash(node -e \"const a=require\\('./app.json'\\); console.log\\('scheme:', a.expo?.scheme\\); console.log\\('slug:', a.expo?.slug\\);\")",
+      "mcp__Claude_in_Chrome__find",
+      "Bash(node -e \"const t=require\\('./tsconfig.json'\\); console.log\\(JSON.stringify\\(t.compilerOptions?.noUnusedLocals\\), JSON.stringify\\(t.extends\\)\\); \")",
+      "Bash(dir scripts *)",
+      "Bash(node -e \"const fs=require\\('fs'\\);['scripts'].forEach\\(d=>{try{fs.readdirSync\\(d\\).forEach\\(f=>console.log\\(d+'/'+f\\)\\)}catch\\(e\\){console.log\\('no '+d\\)}}\\)\")",
+      "Bash(findstr /i \"sound .js .mjs .ts gen\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const s=fs.readFileSync\\('constants/categories.ts','utf8'\\);const m=[...s.matchAll\\(/'\\([A-Z]+\\)'/g\\)].map\\(x=>x[1]\\);const long=[...new Set\\(m.filter\\(w=>w.length>6\\)\\)];console.log\\('words >6 letters:', long.length? long.join\\(', '\\) : 'NONE'\\); console.log\\('total word tokens:', m.length\\);\")"
     ]
   }
 }

@@ -89,6 +89,12 @@ function notify() {
   listeners.forEach((listener) => listener());
 }
 
+// Synchronous read of the current settings without subscribing — handy for
+// one-off checks at event time (e.g. gating a click sound on a button press).
+export function getAppSettings(): AppState['settings'] {
+  return cache?.settings ?? DEFAULTS.settings;
+}
+
 export function useAppState() {
   const [state, setState] = useState<AppState>(cache || DEFAULTS);
 

@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Polygon, Rect } from 'react-native-svg';
-import { loginAsGuest, loginWithEmail, registerWithEmail } from '../lib/online';
+import { loginAsGuest, loginWithEmail, loginWithGoogle, registerWithEmail } from '../lib/online';
 import { Theme } from '../constants/theme';
 
 const BG_URI =
@@ -86,6 +86,19 @@ export default function LoginScreen() {
       router.replace('/levels');
     } catch (error: any) {
       Alert.alert('Guest error', error?.message || 'Something went wrong.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const googleLogin = async () => {
+    try {
+      setLoading(true);
+      await loginWithGoogle();
+      router.replace('/levels');
+    } catch (error: any) {
+      const msg: string = error?.message || 'Something went wrong.';
+      if (!/cancel/i.test(msg)) Alert.alert('Google sign-in', msg);
     } finally {
       setLoading(false);
     }
@@ -238,8 +251,14 @@ export default function LoginScreen() {
                 <View style={styles.dividerLine} />
               </View>
 
+              {/* Google */}
+              <Pressable onPress={googleLogin} disabled={loading} style={styles.googleBtn}>
+                <Ionicons name="logo-google" size={18} color="#EA4335" />
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </Pressable>
+
               {/* Guest */}
-              <Pressable onPress={guestLogin} disabled={loading} style={styles.guestBtn}>
+              <Pressable onPress={guestLogin} disabled={loading} style={[styles.guestBtn, { marginTop: 10 }]}>
                 <Ionicons name="person-outline" size={18} color={Theme.textDim} />
                 <Text style={styles.guestText}>Play as Guest</Text>
               </Pressable>
@@ -324,6 +343,10 @@ const styles = StyleSheet.create({
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 18 },
   dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,150,0,0.15)' },
   dividerText: { color: Theme.textMute, fontWeight: '700', fontSize: 12 },
+
+  // Google
+  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 18, paddingVertical: 14, borderWidth: 1, borderColor: 'rgba(0,0,0,0.10)' },
+  googleText: { color: '#1F1F1F', fontWeight: '900', fontSize: 15 },
 
   // Guest
   guestBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 18, paddingVertical: 14, borderWidth: 1, borderColor: 'rgba(255,150,0,0.16)' },

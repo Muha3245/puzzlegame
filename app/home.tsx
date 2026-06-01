@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedPressable } from '../components/AnimatedPressable';
+import { AnimatedEntry } from '../components/AnimatedEntry';
 import { Theme } from '../constants/theme';
 import { useAppTheme } from '../lib/appTheme';
 import { useAppState } from '../lib/storage';
@@ -320,7 +321,9 @@ export default function Home() {
         </Text>
 
         {/* ── Player card ── */}
-        <PlayerCard name={state.profile.name} streak={7} wins={14} />
+        <AnimatedEntry from="scale" duration={420}>
+          <PlayerCard name={state.profile.name} streak={7} wins={14} />
+        </AnimatedEntry>
 
         {/* ── Section header ── */}
         <View style={styles.sectionBar}>

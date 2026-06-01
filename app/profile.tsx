@@ -139,7 +139,17 @@ export default function Profile() {
   };
 
   const handleLogout = async () => {
-    try { await logoutOnline(); router.replace('/login'); } catch {}
+    try {
+      await logoutOnline();
+      // Clear locally-cached identity so the next user/guest doesn't inherit
+      // the previous account's avatar or name.
+      updateProfile({ photoURL: undefined });
+      setOnlineProfile(null);
+      setIsLoggedIn(false);
+      router.replace('/login');
+    } catch (e: any) {
+      Alert.alert('Logout failed', e?.message || 'Could not sign out. Please try again.');
+    }
   };
 
   const avatar = safeAvatar(state.profile.avatar);

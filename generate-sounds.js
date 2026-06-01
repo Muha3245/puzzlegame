@@ -134,72 +134,130 @@ function mix(...layers) {
   return o;
 }
 
+// ─── Extra DSP for a polished, modern "candy" feel ──────────────────────────
+
+/** Bright mallet / marimba tone (sine + soft harmonics) */
+function mallet(f, d) {
+  const out = new Float64Array(nOf(d));
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR;
+    out[i] = Math.sin(2 * Math.PI * f * t)
+           + 0.20 * Math.sin(2 * Math.PI * f * 2 * t)
+           + 0.09 * Math.sin(2 * Math.PI * f * 3 * t);
+  }
+  return out;
+}
+
+/** Juicy "pop" — exponential pitch glide from f0 to f1 */
+function pop(f0, f1, d) {
+  const out = new Float64Array(nOf(d));
+  let ph = 0;
+  for (let i = 0; i < out.length; i++) {
+    const f = f0 * Math.pow(f1 / f0, i / out.length);
+    ph += (2 * Math.PI * f) / SR;
+    out[i] = Math.sin(ph);
+  }
+  return out;
+}
+
+/** Low-passed (soft) noise for airy transients */
+function softNoise(d, lp = 0.35) {
+  const out = noise(d);
+  let prev = 0;
+  for (let i = 0; i < out.length; i++) { prev += lp * (out[i] - prev); out[i] = prev; }
+  return out;
+}
+
+/** Subtle feedback reverb tail — adds space/polish. Buffer needs tail room. */
+function reverb(sig, mixAmt = 0.18) {
+  const out = new Float64Array(sig);
+  const taps = [0.013, 0.023, 0.034, 0.048];
+  for (const tap of taps) {
+    const dly = Math.round(tap * SR);
+    for (let rep = 1; rep <= 5; rep++) {
+      const off = dly * rep;
+      const a = mixAmt * Math.pow(0.55, rep);
+      for (let i = off; i < out.length; i++) out[i] += sig[i - off] * a;
+    }
+  }
+  return out;
+}
+
 // ─── SFX generators ──────────────────────────────────────────────────────────
 
 function genTap() {
-  // Soft premium UI click – short FM bell + micro noise
-  const d = 0.14, t = buf(d);
-  const b = applyEnv(bell(840, d, 0.22), adsr(d, 0.003, 0.055, 0.08, 0.075));
-  for (let i = 0; i < t.length; i++) t[i] = b[i] * 0.72;
-  place(t, applyEnv(noise(0.004), adsr(0.004, 0, 0.001, 0, 0.003)), 0, 0.28);
-  return fade(normalize(t, 0.70));
+  // Juicy candy "pop" — quick downward blip + glassy overtone
+  const d = 0.18, t = buf(d);
+  place(t, applyEnv(pop(880, 500, 0.085), adsr(0.085, 0.002, 0.028, 0, 0.055)), 0, 0.70);
+  place(t, applyEnv(softNoise(0.006), adsr(0.006, 0, 0.002, 0, 0.004)), 0, 0.20);
+  place(t, applyEnv(bell(1560, 0.10, 0.30), adsr(0.10, 0.002, 0.03, 0.05, 0.06)), 0.002, 0.16);
+  return fade(normalize(reverb(t, 0.10), 0.72));
 }
 
 function genMenuOpen() {
-  // Rising sweep + high sparkle trio
-  const d = 0.30, t = buf(d);
-  const sw = applyEnv(sweep(360, 840, d), adsr(d, 0.01, 0.10, 0.22, 0.14));
-  for (let i = 0; i < t.length; i++) t[i] = sw[i] * 0.48;
-  [[1800, 0.10], [2400, 0.14], [3200, 0.18]].forEach(([f, s]) =>
-    place(t, applyEnv(sine(f, 0.14), adsr(0.14, 0.004, 0.05, 0, 0.08)), s, 0.14));
-  return fade(normalize(t, 0.74));
+  // Bright bubbly rise — pop glide + sparkle trio
+  const d = 0.36, t = buf(d);
+  place(t, applyEnv(pop(420, 980, 0.18), adsr(0.18, 0.006, 0.06, 0.20, 0.10)), 0, 0.42);
+  [[1760, 0.06], [2349, 0.10], [3136, 0.15]].forEach(([f, s]) =>
+    place(t, applyEnv(bell(f, 0.16, 0.30), adsr(0.16, 0.003, 0.05, 0.06, 0.09)), s, 0.15));
+  return fade(normalize(reverb(t, 0.16), 0.74));
 }
 
 function genMenuClose() {
-  const d = 0.20;
-  return fade(normalize(applyEnv(sweep(660, 300, d), adsr(d, 0.004, 0.07, 0.18, 0.10)), 0.65));
+  // Soft downward bubble pop
+  const d = 0.24, t = buf(d);
+  place(t, applyEnv(pop(820, 360, 0.16), adsr(0.16, 0.004, 0.05, 0.18, 0.09)), 0, 0.55);
+  place(t, applyEnv(bell(1320, 0.12, 0.25), adsr(0.12, 0.003, 0.04, 0.05, 0.07)), 0, 0.12);
+  return fade(normalize(reverb(t, 0.12), 0.66));
 }
 
 function genLetterSelect() {
-  const d = 0.09;
-  return fade(normalize(applyEnv(bell(700, d, 0.18), adsr(d, 0.002, 0.022, 0.10, 0.055)), 0.58));
+  // Crisp glassy tick — bright mallet + high bell
+  const d = 0.12, t = buf(d);
+  place(t, applyEnv(mallet(920, 0.10), adsr(0.10, 0.002, 0.03, 0.08, 0.06)), 0, 0.50);
+  place(t, applyEnv(bell(1840, 0.08, 0.28), adsr(0.08, 0.002, 0.025, 0.04, 0.05)), 0, 0.16);
+  return fade(normalize(reverb(t, 0.08), 0.60));
 }
 
 function genWordDrag() {
-  const d = 0.42, t = buf(d);
-  const sw = applyEnv(sweep(470, 560, d), adsr(d, 0.04, 0.07, 0.62, 0.12));
-  const nz = applyEnv(noise(d), adsr(d, 0.04, 0.07, 0.62, 0.12));
-  for (let i = 0; i < t.length; i++) t[i] = sw[i] * 0.38 + nz[i] * 0.04;
+  const d = 0.40, t = buf(d);
+  const sw = applyEnv(sweep(520, 640, d), adsr(d, 0.04, 0.07, 0.60, 0.12));
+  const nz = applyEnv(softNoise(d), adsr(d, 0.04, 0.07, 0.60, 0.12));
+  for (let i = 0; i < t.length; i++) t[i] = sw[i] * 0.34 + nz[i] * 0.05;
   return fade(normalize(t, 0.44));
 }
 
 function genWordFound() {
-  // C5 E5 G5 C6 ascending arpeggio – magical chime
-  const d = 0.75, t = buf(d);
-  [[523.25, 0.00], [659.25, 0.10], [783.99, 0.20], [1046.50, 0.32]].forEach(([f, s]) => {
-    const nd = Math.min(0.38, d - s);
-    place(t, applyEnv(bell(f, nd, 0.40), adsr(nd, 0.005, 0.08, 0.26, 0.24)), s, 0.58);
+  // Bright ascending mallet arpeggio C5 E5 G5 C6 + glassy octaves + sparkle
+  const d = 0.85, t = buf(d);
+  [[523.25, 0.00], [659.25, 0.09], [783.99, 0.18], [1046.50, 0.28]].forEach(([f, s]) => {
+    place(t, applyEnv(mallet(f, 0.34), adsr(0.34, 0.004, 0.06, 0.22, 0.22)), s, 0.40);
+    place(t, applyEnv(bell(f * 2, 0.26, 0.40), adsr(0.26, 0.004, 0.05, 0.12, 0.16)), s, 0.14);
   });
-  return fade(normalize(t, 0.82));
+  [[2093, 0.30], [2637, 0.37]].forEach(([f, s]) =>
+    place(t, applyEnv(sine(f, 0.20), adsr(0.20, 0.003, 0.04, 0.06, 0.14)), s, 0.09));
+  return fade(normalize(reverb(t, 0.18), 0.82));
 }
 
 function genWrong() {
-  // Gentle minor-second buzz – Bb3 + B3
+  // Gentle minor-second buzz – Bb3 + B3 (soft, not harsh)
   const d = 0.30, t = buf(d);
-  place(t, applyEnv(sine(233.08, d), adsr(d, 0.004, 0.04, 0.32, 0.17)), 0, 0.48);
-  place(t, applyEnv(sine(246.94, d), adsr(d, 0.004, 0.04, 0.32, 0.17)), 0, 0.32);
-  return fade(normalize(t, 0.60));
+  place(t, applyEnv(sine(233.08, d), adsr(d, 0.004, 0.04, 0.32, 0.17)), 0, 0.46);
+  place(t, applyEnv(sine(246.94, d), adsr(d, 0.004, 0.04, 0.32, 0.17)), 0, 0.30);
+  return fade(normalize(t, 0.58));
 }
 
 function genWordCompleted() {
-  // 5-note rising sparkle burst
-  const d = 0.50, t = buf(d);
-  [[523.25, 0.00], [659.25, 0.07], [783.99, 0.14], [1046.50, 0.22], [1318.51, 0.30]]
+  // 6-note rising sparkle cascade + final glassy ding (very candy)
+  const d = 0.60, t = buf(d);
+  [[523.25, 0.00], [659.25, 0.06], [783.99, 0.12], [1046.50, 0.18], [1318.51, 0.24], [1567.98, 0.30]]
     .forEach(([f, s]) => {
-      const nd = Math.min(0.26, d - s);
-      place(t, applyEnv(bell(f, nd, 0.50), adsr(nd, 0.003, 0.045, 0.15, 0.19)), s, 0.42);
+      const nd = Math.min(0.28, d - s);
+      place(t, applyEnv(bell(f, nd, 0.52), adsr(nd, 0.003, 0.045, 0.15, 0.19)), s, 0.40);
     });
-  return fade(normalize(t, 0.80));
+  // final shimmer ding
+  place(t, applyEnv(bell(2093, 0.26, 0.55), adsr(0.26, 0.003, 0.04, 0.10, 0.18)), 0.32, 0.22);
+  return fade(normalize(reverb(t, 0.18), 0.82));
 }
 
 function genWin() {
@@ -207,7 +265,7 @@ function genWin() {
   const d = 2.5, t = buf(d);
   [261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
     const nd = 0.44;
-    place(t, applyEnv(bell(f, nd, 0.36), adsr(nd, 0.005, 0.08, 0.28, 0.30)), i * 0.09, 0.52);
+    place(t, applyEnv(mallet(f, nd), adsr(nd, 0.005, 0.08, 0.28, 0.30)), i * 0.09, 0.46);
   });
   // Final chord
   [261.63, 329.63, 392.00, 523.25, 659.25].forEach(f => {
@@ -217,40 +275,42 @@ function genWin() {
   // Sparkle trail
   for (let i = 0; i < 12; i++)
     place(t, applyEnv(sine(1380 + i * 175, 0.22), adsr(0.22, 0.003, 0.04, 0.06, 0.16)), 0.80 + i * 0.12, 0.09);
-  return fade(normalize(t, 0.82));
+  return fade(normalize(reverb(t, 0.20), 0.84));
 }
 
 function genLevelUnlock() {
   // Rising sweep → sparkle chord burst
   const d = 1.0, t = buf(d);
-  place(t, applyEnv(sweep(270, 1200, 0.58), adsr(0.58, 0.02, 0.12, 0.42, 0.28)), 0, 0.40);
+  place(t, applyEnv(sweep(270, 1200, 0.58), adsr(0.58, 0.02, 0.12, 0.42, 0.28)), 0, 0.38);
   [1047, 1319, 1568, 2093].forEach((f, i) => {
     const nd = 0.42;
     place(t, applyEnv(bell(f, nd, 0.48), adsr(nd, 0.003, 0.06, 0.22, 0.28)), 0.50 + i * 0.06, 0.42);
   });
-  return fade(normalize(t, 0.84));
+  return fade(normalize(reverb(t, 0.18), 0.86));
 }
 
 function genCoin() {
-  // Bright triple ping – C6 E6 G6
-  const d = 0.40, t = buf(d);
-  [[1047, 0], [1319, 0.05], [1568, 0.11]].forEach(([f, s]) => {
+  // Classic bright coin — quick double ping with a glassy tail (very candy)
+  const d = 0.42, t = buf(d);
+  [[1319, 0.00], [1976, 0.045]].forEach(([f, s]) => {
     const nd = d - s;
-    place(t, applyEnv(bell(f, nd, 0.55), adsr(nd, 0.003, 0.05, 0.16, nd - 0.10)), s, 0.56);
+    place(t, applyEnv(bell(f, nd, 0.58), adsr(nd, 0.002, 0.04, 0.14, nd - 0.08)), s, 0.58);
   });
-  return fade(normalize(t, 0.82));
+  place(t, applyEnv(sine(2637, 0.18), adsr(0.18, 0.002, 0.03, 0.05, 0.12)), 0.05, 0.12);
+  return fade(normalize(reverb(t, 0.16), 0.84));
 }
 
 function genReward() {
-  // Ascending coin arpeggio + sparkle burst
+  // Ascending mallet arpeggio + sparkle burst + reverb glow
   const d = 1.0, t = buf(d);
   [523, 659, 784, 1047, 1319].forEach((f, i) => {
     const nd = 0.48;
-    place(t, applyEnv(bell(f, nd, 0.46), adsr(nd, 0.003, 0.07, 0.25, 0.28)), i * 0.07, 0.48);
+    place(t, applyEnv(mallet(f, nd), adsr(nd, 0.003, 0.07, 0.25, 0.28)), i * 0.07, 0.44);
+    place(t, applyEnv(bell(f * 2, 0.30, 0.42), adsr(0.30, 0.003, 0.05, 0.12, 0.18)), i * 0.07, 0.12);
   });
   for (let i = 0; i < 5; i++)
     place(t, applyEnv(sine(1760 + i * 260, 0.28), adsr(0.28, 0.003, 0.04, 0.07, 0.20)), 0.48 + i * 0.04, 0.11);
-  return fade(normalize(t, 0.82));
+  return fade(normalize(reverb(t, 0.20), 0.84));
 }
 
 function genBattleRequest() {
@@ -283,13 +343,13 @@ function genBattleWin() {
   // Strong victory – 8-note run + chord wall + sparkle rain
   const d = 2.0, t = buf(d);
   [261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((f, i) => {
-    place(t, applyEnv(bell(f, 0.44, 0.37), adsr(0.44, 0.005, 0.08, 0.36, 0.30)), i * 0.08, 0.52);
+    place(t, applyEnv(mallet(f, 0.44), adsr(0.44, 0.005, 0.08, 0.36, 0.30)), i * 0.08, 0.46);
   });
   [261.63, 329.63, 392.00, 523.25, 659.25].forEach(f =>
     place(t, applyEnv(bell(f, 1.1, 0.26), adsr(1.1, 0.01, 0.14, 0.42, 0.62)), 0.78, 0.40));
   for (let i = 0; i < 12; i++)
     place(t, applyEnv(sine(1380 + i * 135, 0.20), adsr(0.20, 0.002, 0.03, 0.05, 0.15)), 0.82 + i * 0.10, 0.10);
-  return fade(normalize(t, 0.80));
+  return fade(normalize(reverb(t, 0.18), 0.82));
 }
 
 function genLose() {
@@ -307,23 +367,24 @@ function genTimerWarning() {
 }
 
 function genXoxMove() {
-  // Wooden tile: noise click + resonant tone
-  const d = 0.20, t = buf(d);
-  place(t, applyEnv(noise(0.024), adsr(0.024, 0, 0.005, 0, 0.019)), 0, 0.44);
-  place(t, applyEnv(sine(310, d), adsr(d, 0.003, 0.04, 0.09, 0.13)), 0, 0.32);
-  return fade(normalize(t, 0.72));
+  // Satisfying tile place: soft click + bright pop + resonant body
+  const d = 0.22, t = buf(d);
+  place(t, applyEnv(softNoise(0.020), adsr(0.020, 0, 0.005, 0, 0.015)), 0, 0.40);
+  place(t, applyEnv(pop(680, 360, 0.10), adsr(0.10, 0.002, 0.03, 0.10, 0.07)), 0, 0.46);
+  place(t, applyEnv(bell(1200, 0.10, 0.30), adsr(0.10, 0.002, 0.03, 0.05, 0.06)), 0, 0.12);
+  return fade(normalize(reverb(t, 0.10), 0.74));
 }
 
 function genXoxWin() {
   // 3-note lead + chord resolution + sparkle
   const d = 1.5, t = buf(d);
   [[523.25, 0.00], [659.25, 0.13], [783.99, 0.26]].forEach(([f, s]) =>
-    place(t, applyEnv(bell(f, 0.33, 0.40), adsr(0.33, 0.005, 0.07, 0.36, 0.22)), s, 0.56));
+    place(t, applyEnv(mallet(f, 0.33), adsr(0.33, 0.005, 0.07, 0.36, 0.22)), s, 0.50));
   [523.25, 659.25, 783.99, 1046.50].forEach(f =>
     place(t, applyEnv(bell(f, 0.88, 0.30), adsr(0.88, 0.01, 0.10, 0.36, 0.52)), 0.48, 0.40));
   for (let i = 0; i < 6; i++)
     place(t, applyEnv(sine(1480 + i * 175, 0.20), adsr(0.20, 0.003, 0.03, 0.07, 0.15)), 0.52 + i * 0.10, 0.10);
-  return fade(normalize(t, 0.78));
+  return fade(normalize(reverb(t, 0.18), 0.80));
 }
 
 function genDraw() {
@@ -416,7 +477,8 @@ function genPuzzleLoop() {
   ];
   for (let c = 0; c < 4; c++) for (const [o, f, a] of pat) {
     const s = c * 12 + o; if (s >= dur) continue;
-    place(t, applyEnv(bell(f, 0.48, 0.32), adsr(0.48, 0.005, 0.06, 0.20, 0.32)), s, a);
+    // Brighter marimba/mallet lead for a more modern, candy-like sparkle.
+    place(t, applyEnv(mallet(f, 0.48), adsr(0.48, 0.005, 0.06, 0.20, 0.32)), s, a);
   }
 
   // Bass roots
@@ -492,13 +554,15 @@ function genCandyLoop() {
   ];
   for (let c = 0; c < 4; c++) for (const [o, f] of pat) {
     const s = c * 12 + o; if (s >= dur) continue;
-    place(t, applyEnv(bell(f, 0.34, 0.42), adsr(0.34, 0.003, 0.05, 0.20, 0.21)), s, 0.18);
+    // Bright mallet lead + glassy octave shimmer = candy-game feel.
+    place(t, applyEnv(mallet(f, 0.34), adsr(0.34, 0.003, 0.05, 0.20, 0.21)), s, 0.17);
+    place(t, applyEnv(bell(f * 2, 0.20, 0.42), adsr(0.20, 0.003, 0.04, 0.10, 0.12)), s, 0.05);
   }
 
   // Frequent sparkles
-  for (let i = 0; i < 24; i++) {
-    const s = 1.5 + i * 2.0; if (s >= dur) continue;
-    place(t, applyEnv(sine([2093,1760,2349,2637,2093][i%5], 0.17), adsr(0.17,0.003,0.03,0.05,0.13)), s, 0.06);
+  for (let i = 0; i < 32; i++) {
+    const s = 1.2 + i * 1.5; if (s >= dur) continue;
+    place(t, applyEnv(sine([2093,1760,2349,2637,3136][i%5], 0.16), adsr(0.16,0.003,0.03,0.05,0.12)), s, 0.06);
   }
 
   // Bass

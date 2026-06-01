@@ -140,25 +140,108 @@ const BG_FILES: Record<BgTrack, any> = {
   'battle-loop': require('../assets/sounds/battle-loop.wav'),
 };
 
+// ── Single-player background engine ─────────────────────────────────────────
+// Guarantees exactly ONE background track is ever audible. A generation token
+// invalidates any in-flight "track finished → play next" callbacks the moment
+// the background is stopped or switched, so tracks can never overlap (the old
+// "2–3 sounds at once" bug).
+
 let bgPlayer: AudioPlayer | null = null;
 let bgCurrent: BgTrack | null = null;
+let bgMode: 'off' | 'shuffle' | 'single' = 'off';
+let bgStatusSub: { remove: () => void } | null = null;
+let bgGen = 0; // bumped on every stop/switch — stale callbacks compare against it
 
+const BG_VOLUME = 0.16;
+
+// Ambient pool for the global background. 'battle-loop' is intentionally
+// excluded — it's reserved for the in-battle screens.
+const AMBIENT_TRACKS: BgTrack[] = [
+  'puzzle-loop',
+  'candy-loop',
+  'forest-loop',
+  'relax-loop',
+];
+
+function pickRandomTrack(exclude: BgTrack | null): BgTrack {
+  const pool = AMBIENT_TRACKS.filter((t) => t !== exclude);
+  const list = pool.length ? pool : AMBIENT_TRACKS;
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+// Tears down the current player + listener. Does NOT change mode/gen.
+function teardownBgPlayer() {
+  try { bgStatusSub?.remove(); } catch {}
+  bgStatusSub = null;
+  releasePlayer(bgPlayer);
+  bgPlayer = null;
+  bgCurrent = null;
+}
+
+// A single looping track — used for the in-battle screens (e.g. 'battle-loop').
 export async function playBgMusic(track: BgTrack = 'puzzle-loop', enabled: boolean) {
   if (!enabled) { stopBgMusic(); return; }
   try {
     await setupAudio();
-    if (bgPlayer && bgCurrent === track) return;
-    stopBgMusic();
-    bgPlayer = createAudioPlayer(BG_FILES[track]);
-    bgPlayer.volume = 0.18;
-    bgPlayer.loop = true;
-    bgPlayer.play();
+    if (bgMode === 'single' && bgCurrent === track && bgPlayer) return;
+
+    const gen = ++bgGen; // invalidate any pending shuffle callback
+    bgMode = 'single';
+    teardownBgPlayer();
+    if (gen !== bgGen) return;
+
+    const player = createAudioPlayer(BG_FILES[track]);
+    player.volume = BG_VOLUME;
+    player.loop = true;
+    bgPlayer = player;
     bgCurrent = track;
+    player.play();
   } catch {}
 }
 
+// Standard "gaming background": plays the ambient tracks one-by-one (sequential
+// shuffle). Each track plays fully, then a different one starts — never layered.
+export async function playShuffledBgMusic(enabled: boolean) {
+  if (!enabled) { stopBgMusic(); return; }
+  try {
+    await setupAudio();
+    if (bgMode === 'shuffle' && bgPlayer) return; // already running, don't stack
+
+    const gen = ++bgGen;
+    bgMode = 'shuffle';
+    teardownBgPlayer();
+    if (gen !== bgGen) return;
+    playNextShuffleTrack(gen, null);
+  } catch {}
+}
+
+function playNextShuffleTrack(gen: number, exclude: BgTrack | null) {
+  // Bail if this chain has been superseded (stopped or switched).
+  if (gen !== bgGen || bgMode !== 'shuffle') return;
+
+  teardownBgPlayer();
+  if (gen !== bgGen || bgMode !== 'shuffle') return;
+
+  const track = pickRandomTrack(exclude);
+  const player = createAudioPlayer(BG_FILES[track]);
+  player.volume = BG_VOLUME;
+  player.loop = false;
+  bgPlayer = player;
+  bgCurrent = track;
+
+  try {
+    bgStatusSub = player.addListener('playbackStatusUpdate', (status: any) => {
+      if (status?.didJustFinish && gen === bgGen && bgMode === 'shuffle') {
+        playNextShuffleTrack(gen, track);
+      }
+    });
+  } catch {}
+
+  player.play();
+}
+
 export function stopBgMusic() {
-  releasePlayer(bgPlayer);
-  bgPlayer = null;
-  bgCurrent = null;
+  bgGen++; // invalidate any pending shuffle callback so nothing restarts
+  bgMode = 'off';
+  teardownBgPlayer();
 }

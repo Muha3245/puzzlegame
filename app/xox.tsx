@@ -4,7 +4,6 @@ import {
   Animated,
   Easing,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -17,207 +16,121 @@ import { useAppTheme } from '../lib/appTheme';
 import { playDrawSound, playLoseSound, playXoxMove, playXoxWin } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 
-type Mark = 'X' | 'O' | null;
-type Mode = 'bot' | 'local' | 'online';
-type BotLevel = 'easy' | 'medium' | 'hard';
+type Mark      = 'X' | 'O' | null;
+type Mode      = 'bot' | 'local' | 'online';
+type BotLevel  = 'easy' | 'medium' | 'hard';
 type BoardSize = 3 | 4 | 5;
 
-const DIFF_META: Record<BotLevel, { label: string; color: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  easy: { label: 'Easy', color: '#4CC38A', icon: 'leaf-outline' },
-  medium: { label: 'Medium', color: '#FF8A1F', icon: 'flash' },
-  hard: { label: 'Hard', color: '#FF4D8D', icon: 'skull-outline' },
+const DIFF_LEVELS: BotLevel[] = ['easy', 'medium', 'hard'];
+
+const DIFF_META: Record<BotLevel, { label: string; short: string; color: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  easy:   { label: 'Easy',   short: 'EASY', color: '#4CC38A', icon: 'leaf-outline'  },
+  medium: { label: 'Medium', short: 'MED',  color: '#FF8A1F', icon: 'flash'         },
+  hard:   { label: 'Hard',   short: 'HARD', color: '#FF4D8D', icon: 'skull-outline' },
 };
 
 const MODES = [
-  { id: 'bot'    as Mode, icon: 'hardware-chip-outline' as const, label: 'VS BOT',    sub: 'Play vs AI' },
-  { id: 'local'  as Mode, icon: 'people-outline'        as const, label: '2 PLAYERS', sub: 'Pass & Play' },
-  { id: 'online' as Mode, icon: 'wifi-outline'          as const, label: 'ONLINE',    sub: 'Challenge Friends' },
+  { id: 'bot'    as Mode, icon: 'hardware-chip-outline' as const, label: 'VS BOT'    },
+  { id: 'local'  as Mode, icon: 'people-outline'        as const, label: '2 PLAYERS' },
+  { id: 'online' as Mode, icon: 'wifi-outline'          as const, label: 'ONLINE'    },
 ];
 
-const BOARD_SIZES: { size: BoardSize; label: string; sub: string }[] = [
-  { size: 3, label: '3 × 3', sub: 'Classic' },
-  { size: 4, label: '4 × 4', sub: 'Extended' },
-  { size: 5, label: '5 × 5', sub: 'Big' },
+const BOARD_SIZES: { size: BoardSize; label: string }[] = [
+  { size: 3, label: '3×3' },
+  { size: 4, label: '4×4' },
+  { size: 5, label: '5×5' },
 ];
 
 const ICON_X: Record<BoardSize, number> = { 3: 54, 4: 38, 5: 28 };
 const ICON_O: Record<BoardSize, number> = { 3: 46, 4: 32, 5: 24 };
 
+// ─── Game logic ───────────────────────────────────────────────────────────────
+
 function getWins(n: number): number[][] {
   const wins: number[][] = [];
-
-  for (let r = 0; r < n; r++) {
-    wins.push(Array.from({ length: n }, (_, c) => r * n + c));
-  }
-
-  for (let c = 0; c < n; c++) {
-    wins.push(Array.from({ length: n }, (_, r) => r * n + c));
-  }
-
+  for (let r = 0; r < n; r++) wins.push(Array.from({ length: n }, (_, c) => r * n + c));
+  for (let c = 0; c < n; c++) wins.push(Array.from({ length: n }, (_, r) => r * n + c));
   wins.push(Array.from({ length: n }, (_, i) => i * n + i));
   wins.push(Array.from({ length: n }, (_, i) => i * n + (n - 1 - i)));
-
   return wins;
 }
 
 function winnerOf(board: Mark[], wins: number[][]): { winner: 'X' | 'O' | 'draw' | null; line: number[] } {
   for (const line of wins) {
     const first = board[line[0]];
-    if (first && line.every((i) => board[i] === first)) {
-      return { winner: first, line };
-    }
+    if (first && line.every((i) => board[i] === first)) return { winner: first, line };
   }
-
-  if (board.every(Boolean)) {
-    return { winner: 'draw', line: [] };
-  }
-
+  if (board.every(Boolean)) return { winner: 'draw', line: [] };
   return { winner: null, line: [] };
 }
 
 function findMoveN(board: Mark[], mark: 'X' | 'O', wins: number[][]): number {
   for (const line of wins) {
-    const vals = line.map((i) => board[i]);
-    const marks = vals.filter((v) => v === mark).length;
+    const vals    = line.map((i) => board[i]);
+    const marks   = vals.filter((v) => v === mark).length;
     const nullIdx = vals.indexOf(null);
-
-    if (marks === line.length - 1 && nullIdx >= 0) {
-      return line[nullIdx];
-    }
+    if (marks === line.length - 1 && nullIdx >= 0) return line[nullIdx];
   }
-
   return -1;
 }
 
 function botMove(board: Mark[], level: BotLevel, wins: number[][], n: number): number {
   const empty = board.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
-
   if (!empty.length) return -1;
-
   if (level !== 'easy') {
-    const win = findMoveN(board, 'O', wins);
-    if (win >= 0) return win;
-
-    const block = findMoveN(board, 'X', wins);
-    if (block >= 0) return block;
+    const win   = findMoveN(board, 'O', wins); if (win >= 0) return win;
+    const block = findMoveN(board, 'X', wins); if (block >= 0) return block;
   }
-
   if (level === 'hard') {
-    const center = Math.floor((n * n) / 2);
+    const center     = Math.floor((n * n) / 2);
     if (!board[center]) return center;
-
-    const corners = n === 3 ? [0, 2, 6, 8] : [0, n - 1, n * (n - 1), n * n - 1];
-
+    const corners    = n === 3 ? [0, 2, 6, 8] : [0, n - 1, n * (n - 1), n * n - 1];
     const freeCorner = corners.find((c) => !board[c]);
     if (freeCorner !== undefined) return freeCorner;
   }
-
   return empty[Math.floor(Math.random() * empty.length)];
 }
 
-function Cell({
-  value,
-  onPress,
-  active,
-  disabled,
-  boardSize,
-}: {
-  value: Mark;
-  onPress: () => void;
-  active: boolean;
-  disabled?: boolean;
-  boardSize: BoardSize;
+// ─── Cell ─────────────────────────────────────────────────────────────────────
+
+function Cell({ value, onPress, active, disabled, boardSize }: {
+  value: Mark; onPress: () => void; active: boolean; disabled?: boolean; boardSize: BoardSize;
 }) {
   const pressScale = useRef(new Animated.Value(1)).current;
-  const markScale = useRef(new Animated.Value(0)).current;
-  const winPulse = useRef(new Animated.Value(1)).current;
-  const winAnim = useRef<Animated.CompositeAnimation | null>(null);
+  const markScale  = useRef(new Animated.Value(0)).current;
+  const winPulse   = useRef(new Animated.Value(1)).current;
+  const winAnim    = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    if (value) {
-      Animated.spring(markScale, {
-        toValue: 1,
-        friction: 3,
-        tension: 280,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      markScale.setValue(0);
-    }
+    if (value) Animated.spring(markScale, { toValue: 1, friction: 3, tension: 280, useNativeDriver: true }).start();
+    else markScale.setValue(0);
   }, [value, markScale]);
 
   useEffect(() => {
     winAnim.current?.stop();
-
     if (active) {
-      winAnim.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(winPulse, {
-            toValue: 1.08,
-            duration: 480,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(winPulse, {
-            toValue: 0.97,
-            duration: 480,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-
+      winAnim.current = Animated.loop(Animated.sequence([
+        Animated.timing(winPulse, { toValue: 1.08, duration: 480, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(winPulse, { toValue: 0.97, duration: 480, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]));
       winAnim.current.start();
-    } else {
-      winPulse.setValue(1);
-    }
-
-    return () => {
-      winAnim.current?.stop();
-    };
+    } else winPulse.setValue(1);
+    return () => { winAnim.current?.stop(); };
   }, [active, winPulse]);
-
-  const pressIn = () => {
-    if (value || disabled) return;
-
-    Animated.spring(pressScale, {
-      toValue: 0.88,
-      friction: 6,
-      tension: 220,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const pressOut = () => {
-    Animated.spring(pressScale, {
-      toValue: 1,
-      friction: 5,
-      tension: 180,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const ix = ICON_X[boardSize];
-  const io = ICON_O[boardSize];
 
   return (
     <Animated.View style={{ flex: 1, transform: [{ scale: winPulse }] }}>
       <Animated.View style={{ flex: 1, transform: [{ scale: pressScale }] }}>
         <Pressable
           style={[styles.cell, active && styles.cellWin]}
-          onPressIn={pressIn}
-          onPressOut={pressOut}
+          onPressIn={() => { if (value || disabled) return; Animated.spring(pressScale, { toValue: 0.88, friction: 6, tension: 220, useNativeDriver: true }).start(); }}
+          onPressOut={() => Animated.spring(pressScale, { toValue: 1, friction: 5, tension: 180, useNativeDriver: true }).start()}
           onPress={onPress}
           disabled={disabled}
         >
           <Animated.View style={{ transform: [{ scale: markScale }] }}>
-            {value === 'X' && (
-              <Ionicons name="close-sharp" size={ix} color={active ? '#FF3D00' : '#FF7A00'} />
-            )}
-
-            {value === 'O' && (
-              <Ionicons name="ellipse-outline" size={io} color={active ? '#00C853' : '#4CC38A'} />
-            )}
+            {value === 'X' && <Ionicons name="close-sharp"     size={ICON_X[boardSize]} color={active ? '#FF3D00' : '#FF7A00'} />}
+            {value === 'O' && <Ionicons name="ellipse-outline" size={ICON_O[boardSize]} color={active ? '#00C853' : '#4CC38A'} />}
           </Animated.View>
         </Pressable>
       </Animated.View>
@@ -225,90 +138,54 @@ function Cell({
   );
 }
 
+// ─── BotThinking ──────────────────────────────────────────────────────────────
+
 function BotThinking() {
   const pulse = useRef(new Animated.Value(1)).current;
-
   useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 0.35,
-          duration: 520,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 520,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    animation.start();
-
-    return () => animation.stop();
+    const a = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 0.3, duration: 520, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1,   duration: 520, useNativeDriver: true }),
+    ]));
+    a.start();
+    return () => a.stop();
   }, [pulse]);
-
   return (
-    <Animated.View style={[styles.turnRow, { opacity: pulse }]}>
-      <View style={[styles.turnIconWrap, { backgroundColor: '#4CC38A22', borderColor: '#4CC38A55' }]}>
-        <Ionicons name="hardware-chip-outline" size={15} color="#4CC38A" />
-      </View>
-      <Text style={[styles.turnText, { color: '#4CC38A' }]}>Bot is thinking...</Text>
+    <Animated.View style={[styles.turnPillBox, { opacity: pulse, borderColor: '#4CC38A88', backgroundColor: 'rgba(76,195,138,0.10)' }]}>
+      <Ionicons name="hardware-chip-outline" size={16} color="#4CC38A" />
+      <Text style={[styles.turnPillText, { color: '#4CC38A' }]}>BOT{'\n'}THINKING</Text>
     </Animated.View>
   );
 }
 
-function ResultOverlay({
-  winner,
-  mode,
-  onPlayAgain,
-}: {
-  winner: 'X' | 'O' | 'draw';
-  mode: Mode;
-  onPlayAgain: () => void;
-}) {
-  const scale = useRef(new Animated.Value(0.5)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+// ─── ResultOverlay ────────────────────────────────────────────────────────────
 
+function ResultOverlay({ winner, mode, onPlayAgain }: { winner: 'X' | 'O' | 'draw'; mode: Mode; onPlayAgain: () => void }) {
+  const scale   = useRef(new Animated.Value(0.5)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scale, {
-        toValue: 1,
-        friction: 5,
-        tension: 130,
-        useNativeDriver: true,
-      }),
+      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, friction: 5, tension: 130, useNativeDriver: true }),
     ]).start();
   }, [opacity, scale]);
 
   const isDraw = winner === 'draw';
   const botWon = winner === 'O' && mode === 'bot';
-  const color = isDraw ? '#FFD23F' : winner === 'X' ? '#FF7A00' : '#4CC38A';
-  const title = isDraw ? 'DRAW!' : botWon ? 'BOT WINS!' : `${winner} WINS!`;
-  const sub = isDraw ? 'Nobody wins this one' : botWon ? 'Better luck next time' : 'Excellent play!';
+  const color  = isDraw ? '#FFD23F' : winner === 'X' ? '#FF7A00' : '#4CC38A';
+  const title  = isDraw ? 'DRAW!'   : botWon ? 'BOT WINS!'  : `${winner} WINS!`;
+  const sub    = isDraw ? 'Well played!' : botWon ? 'Better luck next time!' : 'Excellent play!';
 
   return (
     <Animated.View style={[styles.overlayBg, { opacity }]}>
-      <Animated.View style={[styles.overlayCard, { borderColor: color + '40', transform: [{ scale }] }]}>
+      <Animated.View style={[styles.overlayCard, { borderColor: color + '44', transform: [{ scale }] }]}>
         <View style={[styles.overlayBubble, { backgroundColor: color + '18', borderColor: color + '45' }]}>
-          {isDraw ? (
-            <Ionicons name="remove" size={60} color={color} />
-          ) : winner === 'X' ? (
-            <Ionicons name="close-sharp" size={62} color={color} />
-          ) : (
-            <Ionicons name="ellipse-outline" size={54} color={color} />
-          )}
+          {isDraw          ? <Ionicons name="remove"          size={60} color={color} />
+          : winner === 'X' ? <Ionicons name="close-sharp"     size={62} color={color} />
+          :                  <Ionicons name="ellipse-outline" size={54} color={color} />}
         </View>
-
         <Text style={[styles.overlayTitle, { color }]}>{title}</Text>
         <Text style={styles.overlaySub}>{sub}</Text>
-
         <AnimatedPressable style={[styles.overlayBtn, { backgroundColor: color }]} onPress={onPlayAgain}>
           <Ionicons name="refresh" size={20} color="#fff" />
           <Text style={styles.overlayBtnText}>Play Again</Text>
@@ -318,253 +195,242 @@ function ResultOverlay({
   );
 }
 
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
 export default function Xox() {
-  const { state } = useAppState();
-  const { width } = useWindowDimensions();
+  const { state }         = useAppState();
+  const { width, height } = useWindowDimensions();
+  const { C, scheme }     = useAppTheme();
+  const isDark            = scheme === 'dark';
 
-  const [mode, setMode] = useState<Mode>('bot');
-  const [botLevel, setBotLevel] = useState<BotLevel>('medium');
-  const [boardSize, setBoardSize] = useState<BoardSize>(3);
-  const [board, setBoard] = useState<Mark[]>(Array(9).fill(null));
-  const [turn, setTurn] = useState<'X' | 'O'>('X');
-  const [scores, setScores] = useState({ x: 0, o: 0, draw: 0 });
+  const [mode,       setMode]       = useState<Mode>('bot');
+  const [botLevel,   setBotLevel]   = useState<BotLevel>('medium');
+  const [boardSize,  setBoardSize]  = useState<BoardSize>(3);
+  const [board,      setBoard]      = useState<Mark[]>(Array(9).fill(null));
+  const [turn,       setTurn]       = useState<'X' | 'O'>('X');
+  const [scores,     setScores]     = useState({ x: 0, o: 0, draw: 0 });
+  const [boardWrapH, setBoardWrapH] = useState(0);
 
-  const wins = useMemo(() => getWins(boardSize), [boardSize]);
+  const compact   = height < 760 || width < 390;
+  const tinyPhone = height < 640 || width < 360;
+
+  const wins   = useMemo(() => getWins(boardSize), [boardSize]);
   const result = useMemo(() => winnerOf(board, wins), [board, wins]);
 
-  const BOARD_SIZE_PX = Math.min(width - 36, 370);
+  const maxBoard       = tinyPhone ? 280 : compact ? 314 : 348;
+  const OUTER_BOARD_PX = boardWrapH > 40 ? Math.max(220, Math.min(width - 28, boardWrapH - 14, maxBoard)) : 0;
+  const INNER_BOARD_PX = OUTER_BOARD_PX > 0 ? OUTER_BOARD_PX - (tinyPhone ? 8 : compact ? 10 : 14) : 0;
 
-  const reset = () => {
-    setBoard(Array(boardSize * boardSize).fill(null));
-    setTurn('X');
-  };
+  const reset = () => { setBoard(Array(boardSize * boardSize).fill(null)); setTurn('X'); };
 
-  useEffect(() => {
-    setBoard(Array(boardSize * boardSize).fill(null));
-    setTurn('X');
-  }, [boardSize]);
+  useEffect(() => { setBoard(Array(boardSize * boardSize).fill(null)); setTurn('X'); }, [boardSize]);
 
   useEffect(() => {
     if (!result.winner) return;
-
-    if (result.winner === 'X') {
-      setScores((s) => ({ ...s, x: s.x + 1 }));
-      playXoxWin(state.settings.sound).catch(() => {});
-    } else if (result.winner === 'O') {
-      setScores((s) => ({ ...s, o: s.o + 1 }));
-      (mode === 'bot' ? playLoseSound : playXoxWin)(state.settings.sound).catch(() => {});
-    } else {
-      setScores((s) => ({ ...s, draw: s.draw + 1 }));
-      playDrawSound(state.settings.sound).catch(() => {});
-    }
-  }, [result.winner]);
+    if      (result.winner === 'X') { setScores((s) => ({ ...s, x:    s.x    + 1 })); playXoxWin(state.settings.sound).catch(() => {}); }
+    else if (result.winner === 'O') { setScores((s) => ({ ...s, o:    s.o    + 1 })); (mode === 'bot' ? playLoseSound : playXoxWin)(state.settings.sound).catch(() => {}); }
+    else                            { setScores((s) => ({ ...s, draw: s.draw + 1 })); playDrawSound(state.settings.sound).catch(() => {}); }
+  }, [result.winner, mode, state.settings.sound]);
 
   useEffect(() => {
     if (mode !== 'bot' || turn !== 'O' || result.winner) return;
-
-    const timer = setTimeout(() => {
+    const t = setTimeout(() => {
       setBoard((prev) => {
         const move = botMove(prev, botLevel, wins, boardSize);
         if (move < 0) return prev;
-
-        const next = [...prev];
-        next[move] = 'O';
-        return next;
+        const next = [...prev]; next[move] = 'O'; return next;
       });
-
       setTurn('X');
       playXoxMove(state.settings.sound).catch(() => {});
     }, 520);
-
-    return () => clearTimeout(timer);
+    return () => clearTimeout(t);
   }, [mode, turn, result.winner, botLevel, wins, boardSize, state.settings.sound]);
 
   const tapCell = (index: number) => {
     if (board[index] || result.winner) return;
     if (mode === 'bot' && turn === 'O') return;
-
-    const next = [...board];
-    next[index] = turn;
-
-    setBoard(next);
-    setTurn(turn === 'X' ? 'O' : 'X');
+    const next = [...board]; next[index] = turn;
+    setBoard(next); setTurn(turn === 'X' ? 'O' : 'X');
     playXoxMove(state.settings.sound).catch(() => {});
   };
 
   const isBotThinking = mode === 'bot' && turn === 'O' && !result.winner;
-  const turnColor = turn === 'X' ? '#FF7A00' : '#4CC38A';
+  const diffIdx       = DIFF_LEVELS.indexOf(botLevel);
+  const turnColor     = turn === 'X' ? '#FF7A00' : '#4CC38A';
   const turnIcon: keyof typeof Ionicons.glyphMap = turn === 'X' ? 'close-sharp' : 'ellipse-outline';
+  const turnLabel     = turn === 'X'
+    ? (mode === 'bot' ? 'YOUR\nTURN' : "X'S\nTURN")
+    : (mode === 'bot' ? "BOT'S\nTURN" : "O'S\nTURN");
 
-  const turnLabel =
-    turn === 'X'
-      ? mode === 'bot'
-        ? 'Your Turn'
-        : "X's Turn"
-      : mode === 'bot'
-        ? "Bot's Turn"
-        : "O's Turn";
-
-  const { C } = useAppTheme();
+  const chipBg     = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const chipBorder = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.18)';
 
   return (
-    <ScreenShell title="XOX" subtitle="Offline bot and same-mobile multiplayer">
-        <View style={[styles.screen, { backgroundColor: C.bg }]}>
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            {/* <View style={styles.heroCard}>
-              <View style={styles.heroGlowOne} />
-              <View style={styles.heroGlowTwo} />
+    <ScreenShell title="XO Arena" subtitle="Bot · Local · Online">
+      <View style={[styles.screen, { backgroundColor: C.bg }]}>
 
-              <View style={styles.heroTopRow}>
-                <View>
-                  <Text style={styles.heroSmall}>Tic Tac Toe</Text>
-                  <Text style={styles.heroTitle}>Choose your strategy.</Text>
-                </View>
+        {/* ── Mode pill ─────────────────────────────────── */}
+        <View style={[styles.modePill, { backgroundColor: isDark ? '#2A2520' : C.surface, borderColor: C.divider }]}>
+          {MODES.map((m) => {
+            const active = mode === m.id;
+            return (
+              <AnimatedPressable
+                key={m.id}
+                style={[styles.modeBtn, active && styles.modeBtnActive]}
+                onPress={() => {
+                  if (m.id === 'online') { router.push('/xox-battle'); return; }
+                  setMode(m.id); reset();
+                }}
+              >
+                <Ionicons name={m.icon} size={14} color={active ? '#fff' : C.muted} />
+                <Text style={[styles.modeBtnText, { color: active ? '#fff' : C.muted }]} numberOfLines={1}>
+                  {m.label}
+                </Text>
+              </AnimatedPressable>
+            );
+          })}
+        </View>
 
-                <View style={styles.heroIcon}>
-                  <Ionicons name="grid-outline" size={26} color="#fff" />
-                </View>
-              </View>
+        {/* ── SIZE + DIFFICULTY ──────────────────────────── */}
+        <View style={styles.settingsRow}>
 
-              <Text style={styles.heroSub}>
-                Play against the bot or challenge a friend on the same mobile.
-              </Text>
-            </View> */}
-
-            <View style={styles.modeRow}>
-              {MODES.map((m) => {
-                const active = mode === m.id;
-
+          {/* Board size */}
+          <View style={styles.settingsHalf}>
+            <Text style={[styles.sectionLabel, { color: C.muted }]}>SIZE</Text>
+            <View style={styles.sizeChips}>
+              {BOARD_SIZES.map((b) => {
+                const active = boardSize === b.size;
                 return (
-                  <AnimatedPressable
-                    key={m.id}
+                  <Pressable
+                    key={b.size}
                     style={[
-                      styles.modeCard,
-                      { backgroundColor: C.surface, borderColor: C.divider },
-                      active && styles.modeCardActive,
+                      styles.sizeChip,
+                      { backgroundColor: chipBg, borderColor: chipBorder },
+                      active && { backgroundColor: 'rgba(255,122,0,0.15)', borderColor: '#FF7A00', borderWidth: 2 },
                     ]}
-                    onPress={() => {
-                      if (m.id === 'online') {
-                        router.push('/xox-battle');
-                        return;
-                      }
-                      setMode(m.id);
-                      reset();
-                    }}
+                    onPress={() => setBoardSize(b.size)}
                   >
-                    <View style={[styles.modeIconWrap, active && styles.modeIconWrapActive]}>
-                      <Ionicons name={m.icon} size={25} color={active ? '#fff' : C.muted} />
-                    </View>
-
-                    <Text style={[styles.modeLabel, { color: C.muted }, active && styles.modeLabelActive]}>{m.label}</Text>
-                    <Text style={[styles.modeSub, { color: C.muted }]}>{m.sub}</Text>
-                  </AnimatedPressable>
+                    <Text style={[styles.sizeChipText, { color: active ? '#FF7A00' : C.ink }]}>
+                      {b.label}
+                    </Text>
+                  </Pressable>
                 );
               })}
             </View>
+          </View>
 
-            <View style={[styles.panel, { backgroundColor: C.surface, borderColor: C.divider }]}>
-              <View style={styles.panelHeader}>
-                <Text style={[styles.panelTitle, { color: C.ink }]}>Board Size</Text>
-                <Text style={[styles.panelSub, { color: C.muted }]}>Select your game layout</Text>
-              </View>
-
-              <View style={styles.sizeRow}>
-                {BOARD_SIZES.map((b) => {
-                  const active = boardSize === b.size;
-
-                  return (
-                    <AnimatedPressable
-                      key={b.size}
-                      style={[styles.sizeChip, active && styles.sizeChipActive]}
-                      onPress={() => setBoardSize(b.size)}
-                    >
-                      <Text style={[styles.sizeLabel, active && styles.sizeLabelActive]}>{b.label}</Text>
-                      <Text style={[styles.sizeSub, active && styles.sizeSubActive]}>{b.sub}</Text>
-                    </AnimatedPressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {mode === 'bot' && (
-              <View style={[styles.panel, { backgroundColor: C.surface, borderColor: C.divider }]}>
-                <View style={styles.panelHeader}>
-                  <Text style={[styles.panelTitle, { color: C.ink }]}>Difficulty</Text>
-                  <Text style={[styles.panelSub, { color: C.muted }]}>Choose bot strength</Text>
+          {/* Difficulty / Play mode */}
+          <View style={styles.settingsHalf}>
+            {mode === 'bot' ? (
+              <>
+                <Text style={[styles.sectionLabel, { color: C.muted }]}>BOT LEVEL</Text>
+                <View style={[styles.diffTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.12)' }]}>
+                  <View style={[
+                    styles.diffFill,
+                    {
+                      backgroundColor: DIFF_META[botLevel].color,
+                      width: diffIdx === 0 ? '2%' : diffIdx === 1 ? '50%' : '100%',
+                    },
+                  ]} />
                 </View>
-
-                <View style={styles.diffRow}>
-                  {(Object.entries(DIFF_META) as [BotLevel, typeof DIFF_META[BotLevel]][]).map(([level, meta]) => {
-                    const active = botLevel === level;
-
-                    return (
-                      <AnimatedPressable
-                        key={level}
-                        style={[
-                          styles.diffChip,
-                          active && {
-                            backgroundColor: meta.color + '22',
-                            borderColor: meta.color,
-                          },
-                        ]}
-                        onPress={() => {
-                          setBotLevel(level);
-                          reset();
-                        }}
-                      >
-                        <Ionicons name={meta.icon} size={14} color={active ? meta.color : 'rgba(255,255,255,0.42)'} />
-                        <Text style={[styles.diffText, active && { color: meta.color }]}>{meta.label}</Text>
-                      </AnimatedPressable>
-                    );
-                  })}
+                <View style={styles.diffLabels}>
+                  {DIFF_LEVELS.map((lvl) => (
+                    <Pressable key={lvl} hitSlop={10} onPress={() => { setBotLevel(lvl); reset(); }}>
+                      <Text style={[
+                        styles.diffLabelText,
+                        { color: botLevel === lvl ? DIFF_META[lvl].color : C.muted },
+                        botLevel === lvl && { fontWeight: '900' },
+                      ]}>
+                        {DIFF_META[lvl].short}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
-              </View>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.sectionLabel, { color: C.muted }]}>PLAY MODE</Text>
+                <View style={[styles.passPlayBadge, { backgroundColor: 'rgba(141,231,255,0.12)', borderColor: 'rgba(141,231,255,0.30)' }]}>
+                  <Ionicons name="people-outline" size={12} color="#8DE7FF" />
+                  <Text style={styles.passPlayText}>Pass & Play</Text>
+                </View>
+              </>
             )}
+          </View>
+        </View>
 
-            <View style={styles.scoreRow}>
-              <View style={[styles.scoreBox, styles.scoreBoxX]}>
-                <Ionicons name="close-sharp" size={21} color="#FF7A00" />
-                <Text style={styles.scoreWho}>{mode === 'bot' ? 'YOU' : 'X'}</Text>
-                <Text style={styles.scoreNum}>{scores.x}</Text>
-              </View>
+        {/* ── Score + Turn + Restart ─────────────────────── */}
+        <View style={styles.statusRow}>
+          <View style={[styles.scoreBox, { borderColor: '#FF7A00', backgroundColor: 'rgba(255,122,0,0.12)' }]}>
+            <Text style={[styles.scoreLabel, { color: C.muted }]}>{mode === 'bot' ? 'YOU' : 'X'}</Text>
+            <Text style={[styles.scoreNum, { color: C.ink }]}>{scores.x}</Text>
+          </View>
 
-              <View style={styles.drawBox}>
-                <Text style={styles.drawLabel}>DRAW</Text>
-                <Text style={styles.drawNum}>{scores.draw}</Text>
-              </View>
+          <View style={[styles.drawBox, { borderColor: chipBorder, backgroundColor: chipBg }]}>
+            <Text style={[styles.drawLabel, { color: C.muted }]}>D</Text>
+            <Text style={[styles.drawNum, { color: C.ink }]}>{scores.draw}</Text>
+          </View>
 
-              <View style={[styles.scoreBox, styles.scoreBoxO]}>
-                <Ionicons name="ellipse-outline" size={18} color="#4CC38A" />
-                <Text style={styles.scoreWho}>{mode === 'bot' ? 'BOT' : 'O'}</Text>
-                <Text style={styles.scoreNum}>{scores.o}</Text>
-              </View>
-            </View>
+          <View style={[styles.scoreBox, { borderColor: '#4CC38A', backgroundColor: 'rgba(76,195,138,0.12)' }]}>
+            <Text style={[styles.scoreLabel, { color: C.muted }]}>{mode === 'bot' ? 'BOT' : 'O'}</Text>
+            <Text style={[styles.scoreNum, { color: C.ink }]}>{scores.o}</Text>
+          </View>
 
-            {!result.winner &&
-              (isBotThinking ? (
-                <BotThinking />
-              ) : (
-                <View style={styles.turnRow}>
-                  <View style={[styles.turnIconWrap, { backgroundColor: turnColor + '22', borderColor: turnColor + '55' }]}>
-                    <Ionicons name={turnIcon} size={15} color={turnColor} />
-                  </View>
-                  <Text style={[styles.turnText, { color: turnColor }]}>{turnLabel}</Text>
+          <View style={styles.turnSlot}>
+            {!result.winner && (
+              isBotThinking ? <BotThinking /> : (
+                <View style={[
+                  styles.turnPillBox,
+                  {
+                    borderColor:     turnColor + '88',
+                    backgroundColor: isDark
+                      ? (turnColor === '#FF7A00' ? 'rgba(255,122,0,0.12)' : 'rgba(76,195,138,0.10)')
+                      : (turnColor === '#FF7A00' ? 'rgba(255,122,0,0.08)' : 'rgba(76,195,138,0.07)'),
+                  },
+                ]}>
+                  <Ionicons name={turnIcon} size={18} color={turnColor} />
+                  <Text style={[styles.turnPillText, { color: turnColor }]}>{turnLabel}</Text>
                 </View>
-              ))}
+              )
+            )}
+          </View>
 
-            <View style={styles.boardOuter}>
-              <View style={[styles.board, { width: BOARD_SIZE_PX, height: BOARD_SIZE_PX }]}>
+          <AnimatedPressable style={[styles.restartBtn, { borderColor: chipBorder, backgroundColor: chipBg }]} onPress={reset}>
+            <Ionicons name="refresh" size={18} color={C.muted} />
+          </AnimatedPressable>
+        </View>
+
+        {/* ── Board ─────────────────────────────────────── */}
+        <View
+          style={styles.boardWrap}
+          onLayout={(e) => setBoardWrapH(e.nativeEvent.layout.height)}
+        >
+          {OUTER_BOARD_PX > 0 && INNER_BOARD_PX > 0 && (
+            <View style={[styles.boardOuter, {
+              width:           OUTER_BOARD_PX,
+              height:          OUTER_BOARD_PX,
+              padding:         tinyPhone ? 4 : compact ? 5 : 7,
+              backgroundColor: isDark ? '#0E1525' : '#D8DFEE',
+              borderColor:     isDark ? 'rgba(141,231,255,0.14)' : 'rgba(80,120,200,0.22)',
+            }]}>
+              <View style={[styles.board, {
+                width:           INNER_BOARD_PX,
+                height:          INNER_BOARD_PX,
+                padding:         boardSize === 5 ? 5 : compact ? 6 : 8,
+                gap:             boardSize === 5 ? 5 : 7,
+                backgroundColor: isDark ? '#101728' : '#C8D2E8',
+                borderColor:     isDark ? 'rgba(141,231,255,0.16)' : 'rgba(80,120,200,0.28)',
+              }]}>
                 {Array.from({ length: boardSize }, (_, row) => (
-                  <View key={row} style={styles.boardRow}>
+                  <View key={row} style={[styles.boardRow, { gap: boardSize === 5 ? 5 : 7 }]}>
                     {Array.from({ length: boardSize }, (_, col) => {
-                      const index = row * boardSize + col;
-
+                      const idx = row * boardSize + col;
                       return (
                         <Cell
-                          key={index}
-                          value={board[index]}
-                          active={result.line.includes(index)}
-                          onPress={() => tapCell(index)}
+                          key={idx}
+                          value={board[idx]}
+                          active={result.line.includes(idx)}
+                          onPress={() => tapCell(idx)}
                           disabled={!!result.winner || isBotThinking}
                           boardSize={boardSize}
                         />
@@ -574,480 +440,174 @@ export default function Xox() {
                 ))}
               </View>
             </View>
-
-            <AnimatedPressable style={styles.restartBtn} onPress={reset}>
-              <Ionicons name="refresh" size={16} color="rgba(255,255,255,0.74)" />
-              <Text style={styles.restartText}>Restart Game</Text>
-            </AnimatedPressable>
-          </ScrollView>
-
-          {result.winner && <ResultOverlay winner={result.winner} mode={mode} onPlayAgain={reset} />}
+          )}
         </View>
+
+        {result.winner && <ResultOverlay winner={result.winner} mode={mode} onPlayAgain={reset} />}
+      </View>
     </ScreenShell>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#0B1020',
-  },
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
+const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#0B1020',
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 92,
+    gap: 10,
   },
 
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 38,
-    alignItems: 'center',
-  },
-
-  heroCard: {
-    width: '100%',
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: 32,
-    padding: 20,
-    marginBottom: 14,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-
-  heroGlowOne: {
-    position: 'absolute',
-    width: 170,
-    height: 170,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,122,0,0.24)',
-    right: -55,
-    top: -70,
-  },
-
-  heroGlowTwo: {
-    position: 'absolute',
-    width: 130,
-    height: 130,
-    borderRadius: 999,
-    backgroundColor: 'rgba(76,195,138,0.20)',
-    left: -48,
-    bottom: -55,
-  },
-
-  heroTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 14,
-    alignItems: 'center',
-  },
-
-  heroSmall: {
-    color: '#FFD23F',
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-
-  heroTitle: {
-    color: '#fff',
-    fontSize: 27,
-    fontWeight: '900',
-    lineHeight: 32,
-    marginTop: 6,
-  },
-
-  heroSub: {
-    color: 'rgba(255,255,255,0.66)',
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 20,
-    marginTop: 10,
-    maxWidth: '92%',
-  },
-
-  heroIcon: {
-    width: 54,
+  // ── Mode pill
+  modePill: {
     height: 54,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.13)',
+    flexDirection: 'row',
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
+    padding: 4,
+    gap: 3,
   },
-
-  modeRow: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-    marginBottom: 12,
-  },
-
-  modeCard: {
+  modeBtn: {
     flex: 1,
-    borderRadius: 26,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-
-  modeCardActive: {
-    backgroundColor: 'rgba(255,122,0,0.16)',
-    borderColor: '#FF7A00',
-    shadowColor: '#FF7A00',
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 9 },
-    elevation: 7,
-  },
-
-  modeIconWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 20,
-    marginBottom: 6,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  modeIconWrapActive: {
-    backgroundColor: '#FF7A00',
-  },
-
-  modeLabel: {
-    color: 'rgba(255,255,255,0.52)',
-    fontWeight: '900',
-    fontSize: 12,
-    letterSpacing: 0.4,
-  },
-
-  modeLabelActive: {
-    color: '#fff',
-  },
-
-  modeSub: {
-    color: 'rgba(255,255,255,0.35)',
-    fontWeight: '700',
-    fontSize: 11,
-  },
-
-  panel: {
-    width: '100%',
-    padding: 14,
-    borderRadius: 26,
-    backgroundColor: 'rgba(255,255,255,0.075)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.11)',
-    marginBottom: 12,
-  },
-
-  panelHeader: {
-    marginBottom: 12,
-  },
-
-  panelTitle: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-
-  panelSub: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-
-  sizeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    width: '100%',
-    
-  },
-
-  sizeChip: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 11,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.11)',
-    gap: 2,
-    width:100,
-  },
-
-  sizeChipActive: {
-    backgroundColor: 'rgba(141,231,255,0.15)',
-    borderColor: '#8DE7FF',
-  },
-
-  sizeLabel: {
-    color: 'rgba(255,255,255,0.55)',
-    fontWeight: '900',
-    fontSize: 13,
-  },
-
-  sizeLabelActive: {
-    color: '#8DE7FF',
-  },
-
-  sizeSub: {
-    color: 'rgba(255,255,255,0.32)',
-    fontWeight: '700',
-    fontSize: 10,
-  },
-
-  sizeSubActive: {
-    color: 'rgba(141,231,255,0.75)',
-  },
-
-  diffRow: {
-    flexDirection: 'row',
-    gap: 8,
-    width: '100%',
-  },
-
-  diffChip: {
-    flex: 1,
+    height: 56,
+    width: 100,
+    borderRadius: 999,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    paddingVertical: 11,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  modeBtnActive: {
+    backgroundColor: '#FF7A00',
+    shadowColor: '#FF7A00',
+    shadowOpacity: 0.40,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  modeBtnText: { fontWeight: '900', fontSize: 11, letterSpacing: 0.2 },
+
+  // ── Settings row
+  settingsRow:  { flexDirection: 'row', gap: 14 },
+  settingsHalf: { flex: 1, gap: 7 },
+  sectionLabel: { fontSize: 8, fontWeight: '900', letterSpacing: 1.2 },
+
+  // Size chips
+  sizeChips: { flexDirection: 'row', gap: 5 },
+  sizeChip: {
+    flex: 1,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.11)',
-    width:100,
   },
+  sizeChipText: { fontSize: 13, fontWeight: '900' },
 
-  diffText: {
-    color: 'rgba(255,255,255,0.45)',
-    fontWeight: '800',
-    fontSize: 12,
+  // Difficulty slider
+  diffTrack: {
+    height: 6,
+    borderRadius: 99,
+    overflow: 'hidden',
   },
+  diffFill: {
+    position: 'absolute',
+    left: 0, top: 0, bottom: 0,
+    borderRadius: 99,
+  },
+  diffLabels:    { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 1 },
+  diffLabelText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
 
-  scoreRow: {
+  // Pass & play
+  passPlayBadge: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
-    gap: 8,
-    width: '100%',
-    marginBottom: 12,
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
   },
+  passPlayText: { color: '#8DE7FF', fontWeight: '900', fontSize: 10 },
+
+  // ── Status row
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
 
   scoreBox: {
-    flex: 1,
-    alignItems: 'center',
-    borderRadius: 24,
-    paddingVertical: 14,
-    gap: 3,
-    borderWidth: 1,
+    width: 50, height: 50, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1.5,
   },
-
-  scoreBoxX: {
-    backgroundColor: 'rgba(255,122,0,0.12)',
-    borderColor: 'rgba(255,122,0,0.25)',
-  },
-
-  scoreBoxO: {
-    backgroundColor: 'rgba(76,195,138,0.12)',
-    borderColor: 'rgba(76,195,138,0.25)',
-  },
-
-  scoreWho: {
-    color: 'rgba(255,255,255,0.52)',
-    fontWeight: '900',
-    fontSize: 10,
-    letterSpacing: 0.8,
-  },
-
-  scoreNum: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 28,
-  },
+  scoreLabel: { fontSize: 8,  fontWeight: '900', letterSpacing: 0.4 },
+  scoreNum:   { fontSize: 20, fontWeight: '900', lineHeight: 24 },
 
   drawBox: {
-    width: 74,
-    alignItems: 'center',
-    borderRadius: 24,
-    paddingVertical: 14,
-    gap: 3,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.11)',
+    width: 32, height: 50, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1,
   },
+  drawLabel: { fontSize: 7,  fontWeight: '900' },
+  drawNum:   { fontSize: 15, fontWeight: '900' },
 
-  drawLabel: {
-    color: 'rgba(255,255,255,0.4)',
-    fontWeight: '900',
-    fontSize: 9,
-    letterSpacing: 0.8,
-  },
-
-  drawNum: {
-    color: 'rgba(255,255,255,0.70)',
-    fontWeight: '900',
-    fontSize: 20,
-  },
-
-  turnRow: {
+  turnSlot: { flex: 1 },
+  turnPillBox: {
+    height: 50,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-
-  turnIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 11,
-    alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-  },
-
-  turnText: {
-    fontWeight: '900',
-    fontSize: 15,
-  },
-
-  boardOuter: {
-    padding: 6,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-
-  board: {
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 30,
+    gap: 7,
+    borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.13)',
-    padding: 10,
-    gap: 8,
+    paddingHorizontal: 10,
   },
-
-  boardRow: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  cell: {
-    flex: 1,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 7,
-  },
-
-  cellWin: {
-    backgroundColor: '#ADFFD0',
-    borderWidth: 2,
-    borderColor: '#4CC38A',
-  },
+  turnPillText: { fontSize: 13, fontWeight: '900', lineHeight: 16 },
 
   restartBtn: {
-    marginTop: 18,
-    flexDirection: 'row',
+    width: 44, height: 44, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1.5,
+  },
+
+  // ── Board
+  boardWrap: {
+    flex: 1,
     alignItems: 'center',
-    gap: 7,
-    paddingVertical: 13,
-    paddingHorizontal: 24,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.13)',
+    justifyContent: 'flex-start',
+    paddingTop: 4,
   },
-
-  restartText: {
-    color: 'rgba(255,255,255,0.74)',
-    fontWeight: '900',
-    fontSize: 14,
+  boardOuter: {
+    borderRadius: 30, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8,
   },
+  board: { alignSelf: 'center', borderRadius: 24, borderWidth: 1.5 },
+  boardRow: { flex: 1, flexDirection: 'row' },
+  cell: {
+    flex: 1, borderRadius: 15,
+    backgroundColor: '#F8FAFF',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.20, shadowRadius: 8, shadowOffset: { width: 0, height: 5 }, elevation: 4,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.68)',
+  },
+  cellWin: { backgroundColor: '#D8FFE8', borderWidth: 2, borderColor: '#4CC38A' },
 
+  // ── Result overlay
   overlayBg: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(5,8,18,0.94)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 100,
+    alignItems: 'center', justifyContent: 'center', zIndex: 100, paddingHorizontal: 18,
   },
-
   overlayCard: {
-    width: '84%',
-    backgroundColor: 'rgba(18,24,42,0.98)',
-    borderRadius: 38,
-    padding: 30,
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1.5,
-    shadowColor: '#000',
-    shadowOpacity: 0.7,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 24,
+    width: '100%', maxWidth: 360, backgroundColor: '#12182A',
+    borderRadius: 36, padding: 28, alignItems: 'center', gap: 10, borderWidth: 1.5,
+    shadowColor: '#000', shadowOpacity: 0.7, shadowRadius: 30, shadowOffset: { width: 0, height: 14 }, elevation: 24,
   },
-
   overlayBubble: {
-    width: 106,
-    height: 106,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    marginBottom: 4,
+    width: 100, height: 100, borderRadius: 38,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, marginBottom: 4,
   },
-
-  overlayTitle: {
-    fontWeight: '900',
-    fontSize: 36,
-    letterSpacing: -0.5,
-  },
-
-  overlaySub: {
-    color: 'rgba(255,255,255,0.56)',
-    fontWeight: '700',
-    fontSize: 14,
-    marginBottom: 6,
-  },
-
-  overlayBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    paddingHorizontal: 34,
-    borderRadius: 999,
-    marginTop: 4,
-  },
-
-  overlayBtnText: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 16,
-  },
+  overlayTitle:   { fontWeight: '900', fontSize: 34, letterSpacing: -0.5, textAlign: 'center' },
+  overlaySub:     { color: 'rgba(255,255,255,0.56)', fontWeight: '700', fontSize: 13, marginBottom: 4, textAlign: 'center' },
+  overlayBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 32, borderRadius: 999, marginTop: 4 },
+  overlayBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
 });

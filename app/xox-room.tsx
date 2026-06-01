@@ -148,6 +148,7 @@ export default function XoxRoomScreen() {
 
   const broadcastRef  = useRef<{ send: (d: XoxMoveBroadcast) => void; cleanup: () => void } | null>(null);
   const soundPlayedRef = useRef(false);
+  const coinAppliedRef = useRef(false);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -215,7 +216,10 @@ export default function XoxRoomScreen() {
 
   useEffect(() => {
     if (!roomId) return;
-    return subscribeToXoxRoom(roomId, syncFromRoom);
+    const unsub = subscribeToXoxRoom(roomId, syncFromRoom);
+    return () => {
+      unsub?.();
+    };
   }, [roomId]);
 
   // ── Broadcast — instant move sync ─────────────────────────────────────────
@@ -283,6 +287,17 @@ export default function XoxRoomScreen() {
       playBattleWin(state.settings.sound).catch(() => {});
     } else {
       playLoseSound(state.settings.sound).catch(() => {});
+    }
+
+    // Coins: award the winner / deduct the loser exactly once when the online
+    // game ends (draw → no change). Mirrors the word-search battle economy.
+    // Bigger boards pay/cost a little more. The quit path is handled separately
+    // in handleQuit (fixed EXIT_COIN_PENALTY), so skip it here.
+    if (room?.boardSize && winner !== 'draw' && !coinAppliedRef.current) {
+      coinAppliedRef.current = true;
+      const bonus = (room.boardSize - 3) * 10; // 3×3:0  4×4:10  5×5:20
+      if (winner === myMark) addCoins(40 + bonus);
+      else addCoins(-(20 + Math.floor(bonus / 2)));
     }
   }, [winner, myMark]);
 
@@ -399,6 +414,8 @@ export default function XoxRoomScreen() {
       coins: 0,
       totalScore: 0,
       levelsCompleted: 0,
+      battlesWon: 0,
+      battlesLost: 0,
     };
     try {
       const newRoom = await createXoxRoom({ friend, boardSize: room.boardSize });

@@ -7,7 +7,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useAppTheme } from '../lib/appTheme';
 import BottomTabBar from '../components/BottomTabBar';
-import { playBgMusic, stopBgMusic } from '../lib/audio';
+import { playShuffledBgMusic, stopBgMusic } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 import {
   acceptBattleRoom,
@@ -30,7 +30,7 @@ function AppShell() {
 
   useEffect(() => {
     if (state.settings.sound) {
-      playBgMusic('puzzle-loop', true).catch(() => {});
+      playShuffledBgMusic(true).catch(() => {});
     } else {
       stopBgMusic();
     }
@@ -54,6 +54,10 @@ function AppShell() {
       '/help',
       '/xox-room',
     ];
+
+    // Splash/loading screen lives at the index route ('/') — keep the bottom
+    // tab bar hidden there so it doesn't flash over the loading animation.
+    if (pathname === '/' || pathname === '/index') return true;
 
     return hiddenRoutes.some((route) => {
       return pathname === route || pathname.startsWith(`${route}/`);
@@ -138,10 +142,11 @@ function AppShell() {
       setPendingXox(null);
 
       router.replace(`/xox-room?roomId=${room.id}`);
-    } catch {
+    } catch (e: any) {
+      console.error('[XOX Accept error]', e?.message ?? e);
       Alert.alert(
         'Error',
-        'Could not accept XOX challenge. Open XOX Online to try again.'
+        e?.message || 'Could not accept XOX challenge. Open XOX Online to try again.'
       );
     } finally {
       setXoxAcceptBusy(false);
@@ -163,6 +168,8 @@ function AppShell() {
         <Stack
           screenOptions={{
             headerShown: false,
+            animation: 'slide_from_right',
+            animationDuration: 260,
             contentStyle: {
               backgroundColor: C.bg,
             },

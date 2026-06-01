@@ -2,6 +2,12 @@
 // Supabase helpers for auth, profiles, friends, leaderboard, progress, and live battle rooms.
 
 import { supabase } from "./supabase";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
+
+// Required on Android/iOS so the in-app browser can hand the auth redirect
+// back to the app. Safe to call at module load.
+WebBrowser.maybeCompleteAuthSession();
 
 const ONLINE_LOG_THROTTLE = new Map<string, number>();
 
@@ -36,6 +42,8 @@ export type PublicUser = {
   coins: number;
   totalScore: number;
   levelsCompleted: number;
+  battlesWon: number;
+  battlesLost: number;
   createdAt?: any;
   updatedAt?: any;
 };
@@ -77,6 +85,7 @@ export type BattlePlayerState = {
   elapsedSeconds: number;
   isReady: boolean;
   isFinished: boolean;
+  hasQuit?: boolean;
   lastWord?: string | null;
   updatedAt?: any;
 };
@@ -92,6 +101,8 @@ function mapUser(row: any): PublicUser {
     coins: row.coins ?? 0,
     totalScore: row.total_score ?? 0,
     levelsCompleted: row.levels_completed ?? 0,
+    battlesWon: row.battles_won ?? 0,
+    battlesLost: row.battles_lost ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -127,6 +138,7 @@ function mapBattlePlayer(row: any): BattlePlayerState {
     elapsedSeconds: row.elapsed_seconds ?? 0,
     isReady: row.is_ready === true,
     isFinished: row.is_finished === true,
+    hasQuit: row.has_quit === true,
     lastWord: row.last_word,
     updatedAt: row.updated_at,
   };
@@ -139,6 +151,27 @@ export async function getCurrentUserId(): Promise<string | null> {
   return data.session?.user?.id ?? null;
 }
 
+export type AuthStatus = {
+  // True only for a real account (email/password or Google). Guests excluded.
+  loggedIn: boolean;
+  // True for an anonymous "Play as Guest" session.
+  isGuest: boolean;
+  uid: string | null;
+};
+
+// Online features (battle / XOX online) require a real, non-anonymous account
+// so opponents, friends and stats persist. Use this to gate those entry points.
+export async function getAuthStatus(): Promise<AuthStatus> {
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user;
+  const isGuest = user?.is_anonymous === true;
+  return {
+    loggedIn: !!user && !isGuest,
+    isGuest,
+    uid: user?.id ?? null,
+  };
+}
+
 export async function ensureUserProfile(
   uid: string,
   email: string | null | undefined,
@@ -147,12 +180,14 @@ export async function ensureUserProfile(
   const safeName =
     displayName?.trim() || email?.split("@")[0] || `Player-${uid.slice(0, 5)}`;
 
+  // NOTE: do not include photo_url here. This runs on every login, and an
+  // upsert would overwrite an existing uploaded avatar back to null. The
+  // column keeps its existing value (or DB default on first insert).
   const { error } = await supabase.from("users").upsert(
     {
       uid,
       display_name: safeName,
       email: email ?? null,
-      photo_url: null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "uid", ignoreDuplicates: false },
@@ -223,6 +258,66 @@ export async function loginAsGuest() {
     `Guest-${data.user.id.slice(0, 5)}`,
   );
   return data.user;
+}
+
+// Google OAuth via the system browser. Requires the Google provider to be
+// enabled in Supabase (Authentication → Providers → Google) with a Google
+// Cloud OAuth client whose authorized redirect URI is
+//   https://<project>.supabase.co/auth/v1/callback
+// The app uses the "puzzlegame" scheme to receive the redirect back.
+export async function loginWithGoogle() {
+  const redirectTo = Linking.createURL("auth-callback");
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo, skipBrowserRedirect: true },
+  });
+  if (error) throw new Error(error.message);
+  if (!data?.url) throw new Error("Could not start Google sign-in.");
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (result.type !== "success" || !result.url) {
+    throw new Error("Google sign-in was cancelled.");
+  }
+
+  // Establish the session from whatever the provider returned. supabase-js
+  // defaults to the PKCE flow (?code=...); older/implicit flows return tokens
+  // in the URL hash (#access_token=...). Handle both.
+  const parsed = Linking.parse(result.url);
+  const code = parsed.queryParams?.code;
+
+  if (typeof code === "string" && code) {
+    const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+    if (exErr) throw new Error(exErr.message);
+  } else {
+    const hash = result.url.includes("#")
+      ? result.url.slice(result.url.indexOf("#") + 1)
+      : "";
+    const hp = new URLSearchParams(hash);
+    const access_token = hp.get("access_token");
+    const refresh_token = hp.get("refresh_token");
+    if (!access_token || !refresh_token) {
+      throw new Error("Google sign-in did not return a session.");
+    }
+    const { error: sErr } = await supabase.auth.setSession({
+      access_token,
+      refresh_token,
+    });
+    if (sErr) throw new Error(sErr.message);
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData.session?.user;
+  if (!user) throw new Error("Google sign-in failed. Please try again.");
+
+  await ensureUserProfile(
+    user.id,
+    user.email,
+    user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.email?.split("@")[0],
+  );
+  return user;
 }
 
 export async function logoutOnline() {
@@ -349,6 +444,25 @@ export async function searchPlayers(searchText: string): Promise<PublicUser[]> {
   return (data ?? []).filter((row) => row.uid !== uid).map(mapUser);
 }
 
+// Default list shown in the Friends screen when the search box is empty:
+// the top players by score (excluding yourself). Lets users discover and add
+// friends without having to type anything first.
+export async function getSuggestedPlayers(limit = 20): Promise<PublicUser[]> {
+  const uid = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .order("total_score", { ascending: false })
+    .limit(limit + 1);
+
+  if (error) throw error;
+  return (data ?? [])
+    .filter((row) => row.uid !== uid)
+    .slice(0, limit)
+    .map(mapUser);
+}
+
 // ─── Friend requests ──────────────────────────────────────────────────────────
 
 export async function sendFriendRequest(toUser: PublicUser) {
@@ -464,6 +578,8 @@ export async function getMyFriends(): Promise<PublicUser[]> {
     coins: 0,
     totalScore: 0,
     levelsCompleted: 0,
+    battlesWon: 0,
+    battlesLost: 0,
     createdAt: row.created_at,
   }));
 }
@@ -541,6 +657,28 @@ export async function createBattleRoom({
   return room;
 }
 
+// Removes finished ("completed") rooms the user is part of so played games and
+// accepted-then-played challenges don't pile up in their lists. A short grace
+// window keeps a just-finished room around briefly so the opponent's screen can
+// still read the final result before it disappears. Win/loss records are saved
+// separately (battle stats / coins) before the room is ever removed.
+async function purgeFinishedRooms(
+  table: "battle_rooms" | "xox_rooms",
+  uid: string,
+) {
+  try {
+    const cutoff = new Date(Date.now() - 10_000).toISOString();
+    await supabase
+      .from(table)
+      .delete()
+      .eq("status", "completed")
+      .or(`player1_id.eq.${uid},player2_id.eq.${uid}`)
+      .lt("updated_at", cutoff);
+  } catch {
+    // Non-fatal: list still renders, cleanup retries on the next load.
+  }
+}
+
 export async function getBattleRooms(): Promise<{
   incoming: BattleRoom[];
   outgoing: BattleRoom[];
@@ -549,6 +687,8 @@ export async function getBattleRooms(): Promise<{
 }> {
   const uid = await getCurrentUserId();
   if (!uid) return { incoming: [], outgoing: [], active: [], completed: [] };
+
+  await purgeFinishedRooms("battle_rooms", uid);
 
   const { data, error } = await supabase
     .from("battle_rooms")
@@ -720,6 +860,28 @@ export async function getBattlePlayers(
   return (data ?? []).map(mapBattlePlayer);
 }
 
+// Fetch public profiles (incl. photo_url) for a set of user ids.
+// Used in-game to show opponent/self avatars without storing photos on the
+// battle_room_players rows. Returns a uid -> photoURL map.
+export async function getPhotosByIds(
+  ids: (string | null | undefined)[],
+): Promise<Record<string, string | null>> {
+  const unique = Array.from(new Set(ids.filter(Boolean) as string[]));
+  if (!unique.length) return {};
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("uid, photo_url")
+    .in("uid", unique);
+  if (error) throw error;
+
+  const map: Record<string, string | null> = {};
+  (data ?? []).forEach((row: any) => {
+    map[row.uid] = row.photo_url ?? null;
+  });
+  return map;
+}
+
 export async function updateBattleProgress({
   roomId,
   score,
@@ -789,14 +951,15 @@ export async function finishBattleRoomNow(
   roomId: string,
   winnerId: string | null,
 ) {
-  const { error } = await supabase
-    .from("battle_rooms")
-    .update({
-      status: "completed",
-      winner_id: winnerId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", roomId);
+  // Records the result into both players' lifetime stats (battles_won /
+  // battles_lost) and DELETES the room + its player rows in one atomic,
+  // idempotent step — so finished matches never accumulate in the DB.
+  // Both clients may call this; the SECURITY DEFINER RPC ensures the stats
+  // are counted exactly once (the first caller wins the delete race).
+  const { error } = await supabase.rpc("record_battle_result", {
+    p_room_id: roomId,
+    p_winner_id: winnerId,
+  });
 
   if (error) throw error;
   return winnerId;
@@ -1044,6 +1207,8 @@ export async function getXoxRooms(): Promise<{
   const uid = await getCurrentUserId();
   if (!uid) return { incoming: [], outgoing: [], active: [], completed: [] };
 
+  await purgeFinishedRooms('xox_rooms', uid);
+
   const { data, error } = await supabase
     .from('xox_rooms')
     .select('*')
@@ -1072,14 +1237,16 @@ export async function getXoxRoom(roomId: string): Promise<XoxRoom | null> {
 }
 
 export async function acceptXoxRoom(room: XoxRoom): Promise<XoxRoom> {
-  const { data, error } = await supabase
+  // Split update + fetch: some RLS setups allow the UPDATE but filter out the
+  // RETURNING rows, which makes .select('*').single() throw PGRST116.
+  const { error } = await supabase
     .from('xox_rooms')
     .update({ status: 'in_progress', updated_at: new Date().toISOString() })
-    .eq('id', room.id)
-    .select('*')
-    .single();
+    .eq('id', room.id);
   if (error) throw error;
-  return mapXoxRoom(data);
+  const updated = await getXoxRoom(room.id);
+  if (!updated) throw new Error('Room not found after accept.');
+  return updated;
 }
 
 export async function rejectXoxRoom(room: XoxRoom): Promise<void> {
@@ -1186,6 +1353,30 @@ export function subscribeToXoxBroadcast(
   return {
     send: (data: XoxMoveBroadcast) =>
       channel.send({ type: 'broadcast', event: 'move', payload: data }),
+    cleanup: () => supabase.removeChannel(channel),
+  };
+}
+
+export function subscribeToXoxChat(
+  roomId: string,
+  onMessage: (message: BattleChatMessage) => void,
+): { send: (message: BattleChatMessage) => void; cleanup: () => void } {
+  const channel = supabase
+    .channel(`xox-chat-${roomId}`, {
+      config: { broadcast: { self: false } },
+    })
+    .on(
+      'broadcast',
+      { event: 'chat' },
+      ({ payload }: { payload: BattleChatMessage }) => {
+        onMessage(payload);
+      },
+    )
+    .subscribe();
+
+  return {
+    send: (message: BattleChatMessage) =>
+      channel.send({ type: 'broadcast', event: 'chat', payload: message }),
     cleanup: () => supabase.removeChannel(channel),
   };
 }

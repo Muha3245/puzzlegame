@@ -15,10 +15,8 @@ import {
   BattleRoom,
   createBattleRoom,
   getBattleRooms,
-  getCurrentUserId,
   PublicUser,
   rejectBattleRoom,
-  subscribeToIncomingBattles,
 } from '../lib/online';
 import { getRandomBattleLevel } from '../lib/battleHelpers';
 import { DifficultyPickerModal } from '../components/DifficultyPickerModal';
@@ -54,7 +52,7 @@ export default function Winner() {
     setIncomingRematch(null);
     setShowDiffPicker(false);
     setRematchStatus(null);
-    router.replace(buildBattleUrl(room));
+    router.replace(buildBattleUrl(room) as any);
   };
 
   const isIncomingFromOpponent = (room: BattleRoom) =>
@@ -166,7 +164,6 @@ export default function Winner() {
     if (!isBattle || !params.opponentId) return;
 
     let alive = true;
-    let unsub: (() => void) | undefined;
 
     staleIncomingRoomIdsRef.current.clear();
     incomingShownRef.current.clear();
@@ -220,14 +217,6 @@ export default function Winner() {
 
     markExistingIncomingAsStale().then(() => {
       if (!alive) return;
-
-      getCurrentUserId()
-        .then((uid) => {
-          if (!alive || !uid) return;
-          unsub = subscribeToIncomingBattles(uid, showIncomingRequest);
-        })
-        .catch(() => {});
-
       check();
     });
 
@@ -235,7 +224,6 @@ export default function Winner() {
 
     return () => {
       alive = false;
-      unsub?.();
       clearInterval(iv);
     };
   }, [isBattle, params.opponentId]);
@@ -268,6 +256,8 @@ export default function Winner() {
       coins: 0,
       totalScore: 0,
       levelsCompleted: 0,
+      battlesWon: 0,
+      battlesLost: 0,
     };
 
     setRematchBusy(true);

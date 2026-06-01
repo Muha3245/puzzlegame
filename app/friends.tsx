@@ -21,6 +21,7 @@ import {
   FriendRequest,
   getIncomingFriendRequests,
   getMyFriends,
+  getSuggestedPlayers,
   PublicUser,
   rejectFriendRequest,
   searchPlayers,
@@ -60,17 +61,30 @@ export default function FriendsScreen() {
     prevRequestsRef.current = requests.map((r) => r.id);
   }, [requests]);
 
-  const doSearch = async () => {
-    if (!search.trim()) return;
-    try {
-      setSearching(true);
-      setPlayers(await searchPlayers(search));
-    } catch (error: any) {
-      Alert.alert('Search error', error?.message || 'Something went wrong.');
-    } finally {
-      setSearching(false);
-    }
-  };
+  // Live search: as the user types we debounce and query. When the box is
+  // empty we show suggested players (top by score) so the list is never blank.
+  useEffect(() => {
+    const q = search.trim();
+    let alive = true;
+    const delay = q ? 300 : 0;
+
+    const t = setTimeout(async () => {
+      try {
+        if (alive) setSearching(true);
+        const results = q ? await searchPlayers(q) : await getSuggestedPlayers();
+        if (alive) setPlayers(results);
+      } catch {
+        if (alive) setPlayers([]);
+      } finally {
+        if (alive) setSearching(false);
+      }
+    }, delay);
+
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [search]);
 
   const sendRequest = async (player: PublicUser) => {
     try {
@@ -104,9 +118,9 @@ export default function FriendsScreen() {
       ? [{ type: 'empty' as const, message: 'No pending requests' }]
       : requests.map((item) => ({ type: 'request' as const, item }))),
 
-    { type: 'section', title: 'Search Results', icon: 'search', count: players.length },
+    { type: 'section', title: search.trim() ? 'Search Results' : 'Suggested Players', icon: 'search', count: players.length },
     ...(players.length === 0
-      ? [{ type: 'empty' as const, message: search.trim() ? 'No players found — try a different name' : 'Type a name above and tap Search' }]
+      ? [{ type: 'empty' as const, message: search.trim() ? 'No players found — try a different name' : 'No players to show yet' }]
       : players.map((item) => ({ type: 'player' as const, item }))),
 
     { type: 'section', title: 'My Friends', icon: 'people', count: friends.length },
@@ -151,14 +165,17 @@ export default function FriendsScreen() {
               placeholderTextColor={C.muted}
               style={[styles.searchInput, { color: C.ink }]}
               returnKeyType="search"
-              onSubmitEditing={doSearch}
+              autoCorrect={false}
+              autoCapitalize="none"
             />
-            {searching && <ActivityIndicator size="small" color={Theme.primary} />}
+            {searching ? (
+              <ActivityIndicator size="small" color={Theme.primary} />
+            ) : search.length > 0 ? (
+              <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color={C.muted} />
+              </Pressable>
+            ) : null}
           </View>
-          <Pressable onPress={doSearch} style={styles.searchBtn}>
-            <Ionicons name="search" size={16} color="#fff" />
-            <Text style={styles.searchBtnText}>Search</Text>
-          </Pressable>
         </View>
 
         {loading ? (

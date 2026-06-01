@@ -31,6 +31,7 @@ function BottomTabBar() {
             <AnimatedPressable
               key={tab.route}
               style={styles.tabBtn}
+              soundType="menuOpen"
               onPress={() => router.push(tab.route as any)}
             >
               {active && (
