@@ -22,8 +22,6 @@ import Svg, { Circle, Path, Polygon, Rect } from 'react-native-svg';
 import { loginAsGuest, loginWithEmail, loginWithGoogle, registerWithEmail } from '../lib/online';
 import { Theme } from '../constants/theme';
 
-const BG_URI =
-  'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80';
 
 type Mode = 'login' | 'register';
 
@@ -112,7 +110,7 @@ export default function LoginScreen() {
   const isLogin = mode === 'login';
 
   return (
-    <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
+    <ImageBackground source={require('../assets/images/background.png')} style={styles.bg} resizeMode="cover">
       <View style={styles.overlay} />
       <View style={styles.orb1} />
       <View style={styles.orb2} />
@@ -280,10 +278,10 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   bg: { flex: 1, backgroundColor: '#0D0500' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(13,5,0,0.80)' },
-  orb1: { position: 'absolute', top: -80, left: -80, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,100,0,0.14)' },
-  orb2: { position: 'absolute', bottom: -60, right: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(255,60,0,0.10)' },
-  orb3: { position: 'absolute', top: '40%', left: '25%', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,180,0,0.06)' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(42,10,128,0.55)' },
+  orb1: { position: 'absolute', top: -80, left: -80, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(192,84,232,0.16)' },
+  orb2: { position: 'absolute', bottom: -60, right: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(255,107,179,0.11)' },
+  orb3: { position: 'absolute', top: '40%', left: '25%', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,215,0,0.07)' },
   safe: { flex: 1 },
   kav: { flex: 1 },
 

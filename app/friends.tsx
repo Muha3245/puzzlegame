@@ -1,6 +1,7 @@
 // app/friends.tsx
 
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -132,8 +133,9 @@ export default function FriendsScreen() {
   const { C, scheme, toggle } = useAppTheme();
 
   return (
-    <View style={[styles.bg, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
+    <View style={styles.bg}>
+      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.divider }]}>

@@ -1,6 +1,7 @@
 // app/profile.tsx
 
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -8,6 +9,7 @@ import {
   Alert,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -155,7 +157,9 @@ export default function Profile() {
   const avatar = safeAvatar(state.profile.avatar);
 
   return (
-    <View style={[styles.bg, { backgroundColor: C.bg }]}>
+    <View style={styles.bg}>
+      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: C.divider }]}>

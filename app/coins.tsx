@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
@@ -60,8 +61,9 @@ export default function Coins() {
   };
 
   return (
-    <View style={[styles.safe, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
+    <View style={styles.safe}>
+      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <ScrollView
         style={styles.scroll}

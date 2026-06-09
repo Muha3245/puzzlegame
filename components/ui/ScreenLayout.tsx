@@ -1,13 +1,7 @@
-// components/ui/ScreenLayout.tsx
-// Dark gaming glass background shared by winner, profile, battle, and other screens.
-
+import { Image } from 'expo-image';
 import React from 'react';
-import { ImageBackground, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-// Dark gaming setup — orange-tinted atmospheric background
-const BG_URI =
-  'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80';
 
 interface ScreenLayoutProps {
   children: React.ReactNode;
@@ -19,50 +13,37 @@ export function ScreenLayout({
   edges = ['top', 'left', 'right', 'bottom'],
 }: ScreenLayoutProps) {
   return (
-    <ImageBackground source={{ uri: BG_URI }} style={styles.bg} resizeMode="cover">
+    <View style={styles.bg}>
+      <Image
+        source={require('../../assets/images/background.png')}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+      />
       <View style={styles.overlay} />
       <View style={styles.orb1} />
       <View style={styles.orb2} />
-      <View style={styles.orb3} />
       <SafeAreaView style={styles.safe} edges={edges}>
         {children}
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#0D0500' },
+  bg: { flex: 1, backgroundColor: '#2A0A80' },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(13,5,0,0.82)',
+    backgroundColor: 'rgba(42,10,128,0.50)',
   },
   orb1: {
-    position: 'absolute',
-    top: -60,
-    left: -60,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgba(255,100,0,0.14)',
+    position: 'absolute', top: -60, left: -60,
+    width: 280, height: 280, borderRadius: 140,
+    backgroundColor: 'rgba(192,84,232,0.16)',
   },
   orb2: {
-    position: 'absolute',
-    bottom: 60,
-    right: -50,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: 'rgba(255,60,0,0.09)',
-  },
-  orb3: {
-    position: 'absolute',
-    top: '45%',
-    left: '30%',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,180,0,0.06)',
+    position: 'absolute', bottom: 60, right: -50,
+    width: 240, height: 240, borderRadius: 120,
+    backgroundColor: 'rgba(255,107,179,0.10)',
   },
   safe: { flex: 1 },
 });

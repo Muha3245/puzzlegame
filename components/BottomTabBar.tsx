@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { usePathname, router } from 'expo-router';
-import { Platform, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedPressable } from './AnimatedPressable';
-import { useAppTheme } from '../lib/appTheme';
 
 const TABS = [
   { label: 'Profile',  icon: 'person-circle-outline',  route: '/profile'     },
@@ -13,19 +12,19 @@ const TABS = [
   { label: 'Settings', icon: 'settings-outline',        route: '/settings'    },
 ] as const;
 
-function BottomTabBar() {
-  const { C, scheme } = useAppTheme();
-  const pathname = usePathname();
+const PINK = '#FF6BB3';
+const GRAY = '#9890A8';
 
-  const bg  = scheme === 'dark' ? '#141210' : C.surface;
-  const bdr = scheme === 'dark' ? '#2A2520' : C.divider;
+function BottomTabBar() {
+  const pathname = usePathname();
+  const insets   = useSafeAreaInsets();
 
   return (
-    <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: bg }]}>
-      <View style={[styles.tabBar, { backgroundColor: bg, borderTopColor: bdr }]}>
+    <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom + 10, 18) }]}>
+      <View style={styles.pill}>
         {TABS.map((tab) => {
           const active = pathname === tab.route || pathname.startsWith(`${tab.route}/`);
-          const color  = active ? '#FF7A00' : (scheme === 'dark' ? '#8A8480' : C.muted);
+          const color  = active ? PINK : GRAY;
 
           return (
             <AnimatedPressable
@@ -34,66 +33,81 @@ function BottomTabBar() {
               soundType="menuOpen"
               onPress={() => router.push(tab.route as any)}
             >
-              {active && (
-                <View style={[styles.activePill, { backgroundColor: 'rgba(255,122,0,0.12)' }]} />
-              )}
-              <Ionicons
-                name={active ? (tab.icon.replace('-outline', '') as any) : tab.icon}
-                size={23}
-                color={color}
-              />
-              <Text style={[styles.tabLabel, { color }]} numberOfLines={1}>
+              <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
+                <Ionicons
+                  name={active ? (tab.icon.replace('-outline', '') as any) : tab.icon}
+                  size={23}
+                  color={color}
+                />
+              </View>
+              <Text style={[styles.label, { color }]} numberOfLines={1}>
                 {tab.label}
               </Text>
+              {active && <View style={styles.dot} />}
             </AnimatedPressable>
           );
         })}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { width: '100%' },
-
-  tabBar: {
+  wrapper: {
     width: '100%',
-    minHeight: 58,
+    paddingHorizontal: 18,
+    paddingTop: 6,
+    backgroundColor: 'transparent',
+  },
+
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    borderTopWidth: 1,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 6 : 8,
-    paddingHorizontal: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 36,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    shadowColor: '#1A0845',
+    shadowOpacity: 0.20,
+    shadowOffset: { width: 0, height: 5 },
+    shadowRadius: 18,
+    elevation: 14,
   },
 
   tabBtn: {
     flex: 1,
-    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
-    paddingVertical: 3,
-    position: 'relative',
+    paddingVertical: 2,
   },
 
-  activePill: {
-    position: 'absolute',
-    top: 0,
-    left: 6,
-    right: 6,
-    bottom: 0,
-    borderRadius: 12,
+  iconWrap: {
+    width: 40,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
   },
 
-  tabLabel: {
+  iconWrapActive: {
+    backgroundColor: 'rgba(255,107,179,0.12)',
+  },
+
+  label: {
     fontSize: 10,
-    lineHeight: 12,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-    includeFontPadding: false,
+    fontWeight: '800',
+    letterSpacing: 0.3,
     textAlign: 'center',
+  },
+
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: PINK,
+    marginTop: 1,
   },
 });
 

@@ -5,6 +5,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   ActivityIndicator,
   Alert,
@@ -491,6 +492,7 @@ export default function XoxRoomScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleQuit} style={styles.backBtn}>
@@ -738,7 +740,7 @@ export default function XoxRoomScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#0B1020' },
+  container:  { flex: 1, backgroundColor: '#2A0A80' },
   centered:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 28 },
   errorText:  { color: '#fff', fontSize: 18, fontWeight: '900', textAlign: 'center' },
   fallbackBtn: {

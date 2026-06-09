@@ -1,6 +1,7 @@
 // app/leaderboard.tsx
 
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -284,8 +285,9 @@ export default function LeaderboardScreen() {
   const myRank = players.find((player) => myUid && player.uid === myUid);
 
   return (
-    <View style={[styles.bg, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
+    <View style={styles.bg}>
+      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* Header */}

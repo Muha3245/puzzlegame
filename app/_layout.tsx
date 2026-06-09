@@ -5,7 +5,7 @@ import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { ThemeProvider, useAppTheme } from '../lib/appTheme';
+import { ThemeProvider } from '../lib/appTheme';
 import BottomTabBar from '../components/BottomTabBar';
 import { playShuffledBgMusic, stopBgMusic } from '../lib/audio';
 import { useAppState } from '../lib/storage';
@@ -24,7 +24,6 @@ import { BattleNotificationModal } from '../components/BattleNotificationModal';
 import { XoxNotificationModal } from '../components/XoxNotificationModal';
 
 function AppShell() {
-  const { C, scheme } = useAppTheme();
   const pathname = usePathname();
   const { state } = useAppState();
 
@@ -161,8 +160,8 @@ function AppShell() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: C.bg }]}>
-      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+    <View style={styles.root}>
+      <StatusBar style="light" />
 
       <View style={styles.stackWrap}>
         <Stack
@@ -171,7 +170,7 @@ function AppShell() {
             animation: 'slide_from_right',
             animationDuration: 260,
             contentStyle: {
-              backgroundColor: C.bg,
+              backgroundColor: '#2A0A80',
             },
           }}
         >

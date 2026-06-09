@@ -267,7 +267,7 @@ export default function Xox() {
 
   return (
     <ScreenShell title="XO Arena" subtitle="Bot · Local · Online">
-      <View style={[styles.screen, { backgroundColor: C.bg }]}>
+      <View style={styles.screen}>
 
         {/* ── Mode pill ─────────────────────────────────── */}
         <View style={[styles.modePill, { backgroundColor: isDark ? '#2A2520' : C.surface, borderColor: C.divider }]}>

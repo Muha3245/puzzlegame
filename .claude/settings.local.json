@@ -20,7 +20,11 @@
       "Bash(dir scripts *)",
       "Bash(node -e \"const fs=require\\('fs'\\);['scripts'].forEach\\(d=>{try{fs.readdirSync\\(d\\).forEach\\(f=>console.log\\(d+'/'+f\\)\\)}catch\\(e\\){console.log\\('no '+d\\)}}\\)\")",
       "Bash(findstr /i \"sound .js .mjs .ts gen\")",
-      "Bash(node -e \"const fs=require\\('fs'\\);const s=fs.readFileSync\\('constants/categories.ts','utf8'\\);const m=[...s.matchAll\\(/'\\([A-Z]+\\)'/g\\)].map\\(x=>x[1]\\);const long=[...new Set\\(m.filter\\(w=>w.length>6\\)\\)];console.log\\('words >6 letters:', long.length? long.join\\(', '\\) : 'NONE'\\); console.log\\('total word tokens:', m.length\\);\")"
+      "Bash(node -e \"const fs=require\\('fs'\\);const s=fs.readFileSync\\('constants/categories.ts','utf8'\\);const m=[...s.matchAll\\(/'\\([A-Z]+\\)'/g\\)].map\\(x=>x[1]\\);const long=[...new Set\\(m.filter\\(w=>w.length>6\\)\\)];console.log\\('words >6 letters:', long.length? long.join\\(', '\\) : 'NONE'\\); console.log\\('total word tokens:', m.length\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const code=fs.readFileSync\\('app/home.tsx','utf8'\\); console.log\\('Lines:', code.split\\('\\\\n'\\).length, '| OK'\\);\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\my app\\\\puzzlegame\\\\app\" -Recurse -Filter \"*.tsx\")",
+      "PowerShell(if \\(Test-Path \"c:\\\\laragon\\\\www\\\\my app\\\\puzzlegame\\\\app\\\\components\"\\) { Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\my app\\\\puzzlegame\\\\app\\\\components\" -Recurse | Where-Object {$_.Extension -in \".tsx\", \".ts\", \".jsx\", \".js\"} | Select-Object -ExpandProperty FullName } else { Write-Host \"components folder not found\" })",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\laragon\\\\www\\\\my app\\\\puzzlegame\\\\components\" -Recurse | Where-Object {$_.Extension -in \".tsx\", \".ts\", \".jsx\", \".js\"} | Select-Object -ExpandProperty FullName)"
     ]
   }
 }

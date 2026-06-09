@@ -1311,13 +1311,10 @@ export default function Game() {
     sendBattleChat.current(message);
   }, [chatText, isLiveBattle, roomId, myBattleState?.displayName]);
 
-  const GAME_BG =
-    "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80";
-
   // ── Render ──
   return (
     <ImageBackground
-      source={{ uri: GAME_BG }}
+      source={require('../assets/images/background.png')}
       style={styles.bg}
       resizeMode="cover"
     >
@@ -2213,10 +2210,10 @@ function PlayerChip({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: "#04160D" },
+  bg: { flex: 1, backgroundColor: "#2A0A80" },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,13,7,0.84)",
+    backgroundColor: "rgba(42,10,128,0.55)",
   },
   orb1: {
     position: "absolute",
@@ -2225,7 +2222,7 @@ const styles = StyleSheet.create({
     width: 240,
     height: 240,
     borderRadius: 120,
-    backgroundColor: "rgba(0,180,90,0.18)",
+    backgroundColor: "rgba(192,84,232,0.16)",
   },
   orb2: {
     position: "absolute",
@@ -2234,7 +2231,7 @@ const styles = StyleSheet.create({
     width: 210,
     height: 210,
     borderRadius: 105,
-    backgroundColor: "rgba(255,195,46,0.12)",
+    backgroundColor: "rgba(255,107,179,0.11)",
   },
   orb3: {
     position: "absolute",
@@ -2243,7 +2240,7 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: "rgba(5,120,62,0.18)",
+    backgroundColor: "rgba(255,215,0,0.07)",
   },
   safe: { flex: 1 },
 

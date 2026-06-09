@@ -3,32 +3,28 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 
 type Scheme = 'light' | 'dark';
 
-export const LIGHT = {
-  bg:      '#EDE8E1',
-  surface: '#FFFFFF',
-  ink:     '#1C1C1E',
-  muted:   '#8A8480',
-  divider: '#D8D3CC',
+// Single candy-glass palette — no visual distinction between light and dark.
+const CANDY = {
+  bg:      '#2A0A80',
+  surface: 'rgba(30,8,90,0.62)',
+  ink:     '#FFFFFF',
+  muted:   'rgba(255,255,255,0.70)',
+  divider: 'rgba(255,255,255,0.18)',
 };
 
-export const DARK = {
-  bg:      '#1C1917',
-  surface: '#252220',
-  ink:     '#F2EDE7',
-  muted:   '#8A8480',
-  divider: '#3A3531',
-};
+export const LIGHT = CANDY;
+export const DARK  = CANDY;
 
 interface ThemeCtx {
   scheme: Scheme;
   toggle: () => void;
-  C: typeof LIGHT;
+  C: typeof CANDY;
 }
 
 const ThemeContext = createContext<ThemeCtx>({
   scheme: 'light',
   toggle: () => {},
-  C: LIGHT,
+  C: CANDY,
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -49,7 +45,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ scheme, toggle, C: scheme === 'dark' ? DARK : LIGHT }}>
+    <ThemeContext.Provider value={{ scheme, toggle, C: CANDY }}>
       {children}
     </ThemeContext.Provider>
   );
