@@ -625,7 +625,7 @@ export default function Home() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 10, paddingBottom: 36 }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 10, paddingBottom: 160 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Top bar ── */}

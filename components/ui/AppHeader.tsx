@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Theme } from '../../constants/theme';
+import { playTapSound } from '../../lib/audio';
+import { getAppSettings } from '../../lib/storage';
 
 interface AppHeaderProps {
   title: string;
@@ -24,7 +26,10 @@ export function AppHeader({
   rightSlot,
   coins,
 }: AppHeaderProps) {
-  const handleBack = onBack ?? (() => router.back());
+  const handleBack = onBack ?? (() => {
+    playTapSound(getAppSettings().sound).catch(() => {});
+    router.back();
+  });
 
   return (
     <View style={styles.header}>

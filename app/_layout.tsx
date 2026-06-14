@@ -7,7 +7,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider } from '../lib/appTheme';
 import BottomTabBar from '../components/BottomTabBar';
-import { playShuffledBgMusic, stopBgMusic } from '../lib/audio';
+import { playBgMusic, stopBgMusic } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 import {
   acceptBattleRoom,
@@ -29,7 +29,7 @@ function AppShell() {
 
   useEffect(() => {
     if (state.settings.sound) {
-      playShuffledBgMusic(true).catch(() => {});
+      playBgMusic(true).catch(() => {});
     } else {
       stopBgMusic();
     }

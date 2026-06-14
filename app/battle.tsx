@@ -505,7 +505,7 @@ function RoomCard({
 const styles = StyleSheet.create({
   content: {
     padding: 18,
-    paddingBottom: 36,
+    paddingBottom: 160,
     gap: 12,
   },
 

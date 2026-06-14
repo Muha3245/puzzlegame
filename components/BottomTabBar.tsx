@@ -20,79 +20,78 @@ function BottomTabBar() {
   const insets   = useSafeAreaInsets();
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom + 10, 18) }]}>
-      <View style={styles.pill}>
-        {TABS.map((tab) => {
-          const active = pathname === tab.route || pathname.startsWith(`${tab.route}/`);
-          const color  = active ? PINK : GRAY;
+    <View style={[styles.wrapper, { bottom: Math.max(insets.bottom + 0, 0) }]}>
+      {TABS.map((tab) => {
+        const active = pathname === tab.route || pathname.startsWith(`${tab.route}/`);
+        const color  = active ? PINK : GRAY;
 
-          return (
+        return (
+          <View key={tab.route} style={styles.tabItem}>
             <AnimatedPressable
-              key={tab.route}
               style={styles.tabBtn}
-              soundType="menuOpen"
+              soundType="tap"
               onPress={() => router.push(tab.route as any)}
             >
               <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
                 <Ionicons
                   name={active ? (tab.icon.replace('-outline', '') as any) : tab.icon}
-                  size={23}
+                  size={24}
                   color={color}
                 />
               </View>
               <Text style={[styles.label, { color }]} numberOfLines={1}>
                 {tab.label}
               </Text>
-              {active && <View style={styles.dot} />}
             </AnimatedPressable>
-          );
-        })}
-      </View>
+          </View>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
-    width: '100%',
-    paddingHorizontal: 18,
-    paddingTop: 6,
-    backgroundColor: 'transparent',
-  },
-
-  pill: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     backgroundColor: '#FFFFFF',
     borderRadius: 36,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    shadowColor: '#1A0845',
-    shadowOpacity: 0.20,
-    shadowOffset: { width: 0, height: 5 },
-    shadowRadius: 18,
-    elevation: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 20,
+    elevation: 16,
+  },
+
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
   },
 
   tabBtn: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    gap: 4,
     paddingVertical: 2,
   },
 
   iconWrap: {
-    width: 40,
-    height: 32,
+    width: 50,
+    height: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
+    borderRadius: 999,
   },
 
   iconWrapActive: {
     backgroundColor: 'rgba(255,107,179,0.12)',
+    borderRadius: 999,
   },
 
   label: {
@@ -100,14 +99,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
     textAlign: 'center',
-  },
-
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: PINK,
-    marginTop: 1,
   },
 });
 

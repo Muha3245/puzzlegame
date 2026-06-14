@@ -21,6 +21,7 @@ import { useAppTheme } from '../lib/appTheme';
 import { ensureUserProfile, getMyProfile, logoutOnline, PublicUser, updatePhotoURL } from '../lib/online';
 import { supabase } from '../lib/supabase';
 import { useAppState } from '../lib/storage';
+import { playTapSound } from '../lib/audio';
 import { PlayerAvatar, FRAME_CONFIGS } from '../components/PlayerAvatar';
 import { pickAndUploadAvatar } from '../lib/uploadPhoto';
 
@@ -43,7 +44,7 @@ function safeAvatar(stored: string): AvatarId {
 }
 
 export default function Profile() {
-  const { C, scheme, toggle } = useAppTheme();
+  const { C } = useAppTheme();
   const { state, updateProfile } = useAppState();
   const [name, setName] = useState(state.profile.name);
   const [onlineProfile, setOnlineProfile] = useState<PublicUser | null>(null);
@@ -163,13 +164,10 @@ export default function Profile() {
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.back(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: C.ink }]}>My Profile</Text>
-          <Pressable onPress={toggle} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
-            <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={20} color={C.ink} />
-          </Pressable>
           <Pressable onPress={() => router.push('/coins')} style={styles.coinPill}>
             <Ionicons name="logo-bitcoin" size={14} color={Theme.warn} />
             <Text style={styles.coinText}>{state.coins}</Text>
@@ -379,7 +377,7 @@ const styles = StyleSheet.create({
   coinPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: 'rgba(255,210,63,0.14)', borderWidth: 1, borderColor: 'rgba(255,210,63,0.35)' },
   coinText: { color: Theme.warn, fontSize: 13, fontWeight: '900' },
 
-  content: { padding: 16, paddingBottom: 40 },
+  content: { padding: 16, paddingBottom: 160 },
 
   // Hero card
   heroCard: { alignItems: 'center', padding: 28, borderRadius: 28, borderWidth: 1, marginBottom: 16, shadowColor: Theme.primary, shadowOpacity: 0.15, shadowOffset: { width: 0, height: 8 }, shadowRadius: 24, elevation: 4 },

@@ -33,6 +33,8 @@ import { AnimatedEntry } from '../components/AnimatedEntry';
 import { SkeletonCard, SkeletonSection } from '../components/SkeletonLoader';
 import { Theme } from '../constants/theme';
 import { useAppTheme } from '../lib/appTheme';
+import { playTapSound } from '../lib/audio';
+import { getAppSettings } from '../lib/storage';
 
 export default function FriendsScreen() {
   const [search, setSearch] = useState('');
@@ -130,7 +132,7 @@ export default function FriendsScreen() {
       : friends.map((item) => ({ type: 'friend' as const, item }))),
   ];
 
-  const { C, scheme, toggle } = useAppTheme();
+  const { C } = useAppTheme();
 
   return (
     <View style={styles.bg}>
@@ -139,7 +141,7 @@ export default function FriendsScreen() {
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Pressable onPress={() => { playTapSound(getAppSettings().sound).catch(() => {}); router.back(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
           <View style={styles.titleWrap}>
@@ -151,9 +153,6 @@ export default function FriendsScreen() {
               <Text style={[styles.sub, { color: C.muted }]}>Search players & send requests</Text>
             </View>
           </View>
-          <Pressable onPress={toggle} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
-            <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={20} color={C.ink} />
-          </Pressable>
         </View>
 
         {/* Search bar */}
@@ -324,7 +323,7 @@ const styles = StyleSheet.create({
   searchBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, borderRadius: 16, justifyContent: 'center', backgroundColor: Theme.primary, shadowColor: Theme.primary, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 5 },
   searchBtnText: { color: '#fff', fontWeight: '900', fontSize: 14 },
 
-  list: { padding: 16, gap: 8, paddingBottom: 32 },
+  list: { padding: 16, gap: 8, paddingBottom: 160 },
 
   // Section
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, marginBottom: 6 },

@@ -16,9 +16,10 @@ import { HighlightText } from '../components/HighlightText';
 import { Theme } from '../constants/theme';
 import { useAppTheme } from '../lib/appTheme';
 import { useAppState } from '../lib/storage';
+import { playTapSound } from '../lib/audio';
 
 export default function Settings() {
-  const { C, scheme, toggle } = useAppTheme();
+  const { C } = useAppTheme();
   const { state, updateSettings } = useAppState();
   const s = state.settings;
 
@@ -28,7 +29,7 @@ export default function Settings() {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Pressable onPress={() => { playTapSound(s.sound).catch(() => {}); router.back(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={24} color={C.ink} />
           </Pressable>
           <HighlightText size="large">Settings</HighlightText>
@@ -39,17 +40,6 @@ export default function Settings() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <SectionHeader icon="color-palette-outline" label="APPEARANCE" />
-
-          <Row
-            icon={scheme === 'dark' ? 'moon' : 'sunny-outline'}
-            iconColor={scheme === 'dark' ? '#8E6BFF' : '#F59E0B'}
-            label="Dark Mode"
-            sub={scheme === 'dark' ? 'Dark theme is active' : 'Light theme is active'}
-            right={<Toggle on={scheme === 'dark'} onChange={() => toggle()} />}
-            onPress={toggle}
-          />
-
           <SectionHeader icon="volume-high-outline" label="AUDIO" />
 
           <View style={{ gap: 6 }}>
@@ -202,7 +192,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  scrollContent: { paddingHorizontal: 16, paddingVertical: 8 },
+  scrollContent: { paddingHorizontal: 16, paddingVertical: 8, paddingBottom: 160 },
 
   sectionHeader: {
     flexDirection: 'row',

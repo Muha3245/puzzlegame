@@ -21,6 +21,8 @@ import { SkeletonLeaderboardRow } from "../components/SkeletonLoader";
 import { Theme } from "../constants/theme";
 import { useAppTheme } from "../lib/appTheme";
 import { getGlobalLeaderboard, getMyProfile, PublicUser } from "../lib/online";
+import { playTapSound } from "../lib/audio";
+import { getAppSettings } from "../lib/storage";
 
 type LeaderboardUser = PublicUser & { rank: number };
 
@@ -222,7 +224,7 @@ function Podium({ top3 }: { top3: LeaderboardUser[] }) {
 }
 
 export default function LeaderboardScreen() {
-  const { C, scheme, toggle } = useAppTheme();
+  const { C, scheme } = useAppTheme();
   const palette = getPalette(C, scheme);
 
   const [players, setPlayers] = useState<LeaderboardUser[]>([]);
@@ -293,7 +295,7 @@ export default function LeaderboardScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => { playTapSound(getAppSettings().sound).catch(() => {}); router.back(); }}
             style={[
               styles.backBtn,
               {
@@ -326,9 +328,6 @@ export default function LeaderboardScreen() {
             </View>
           </View>
 
-          <Pressable onPress={toggle} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
-            <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={20} color={C.ink} />
-          </Pressable>
         </View>
 
         {/* Summary */}
@@ -794,7 +793,7 @@ const styles = StyleSheet.create({
 
   list: {
     paddingHorizontal: 16,
-    paddingBottom: 120,
+    paddingBottom: 160,
     gap: 9,
   },
 

@@ -15,7 +15,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Circle, Defs, Ellipse, FeColorMatrix, Filter, Image as SvgImage, Line, Path, Polygon, Rect } from 'react-native-svg';
 import { CATEGORIES } from '../constants/categories';
 import { Theme } from '../constants/theme';
-import { useAppState } from '../lib/storage';
+import { useAppState, getAppSettings } from '../lib/storage';
+import { playTapSound } from '../lib/audio';
 import { Ionicons } from '@expo/vector-icons';
 
 const LEVELS_PER_CATEGORY = 8;
@@ -64,7 +65,7 @@ const mascotStyle = StyleSheet.create({
   wrap: {
     position: 'absolute',
     right: 10,
-    bottom: 110,   // sits above the floating tab bar
+    bottom: 130,   // sits above the floating tab bar
     zIndex: 99,
   },
 });
@@ -623,7 +624,7 @@ function CategoryCard({
   const stars  = done ? 3 : completedCount >= Math.ceil(LEVELS_PER_CATEGORY * 0.625) ? 2 : completedCount > 0 ? 1 : 0;
 
   return (
-    <Pressable onPress={onPress} style={[s.catCard, { width }]}>
+    <Pressable onPress={() => { playTapSound(getAppSettings().sound).catch(() => {}); onPress(); }} style={[s.catCard, { width }]}>
       <View style={[s.catIconBg, { backgroundColor: withAlpha(accent, 0.13) }]}>
         <CategorySvgIcon name={item.name} size={52} />
         {done && (
@@ -714,7 +715,7 @@ export default function Levels() {
         <View style={s.header}>
           <Pressable
             style={s.backBtn}
-            onPress={selectedCategory ? () => router.replace(`/levels?difficulty=${difficulty}`) : () => router.back()}
+            onPress={() => { playTapSound(state.settings.sound).catch(() => {}); selectedCategory ? router.replace(`/levels?difficulty=${difficulty}`) : router.back(); }}
           >
             <Ionicons name="chevron-back" size={22} color="#1A0845" />
           </Pressable>
@@ -805,7 +806,7 @@ export default function Levels() {
                   <Pressable
                     key={`${selectedCategory.id}-${difficulty}-${level}`}
                     disabled={!unlocked}
-                    onPress={() => router.push(gameRoute as any)}
+                    onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.push(gameRoute as any); }}
                     style={[s.lvCard, { width: levelW }, !unlocked && s.lvLocked]}
                   >
                     {/* Stars */}
@@ -847,7 +848,7 @@ export default function Levels() {
                       <View style={s.lvActions}>
                         <Pressable
                           style={s.lvPlayBtn}
-                          onPress={() => router.push(gameRoute as any)}
+                          onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.push(gameRoute as any); }}
                         >
                           <Ionicons name={completed ? 'refresh' : 'play'} size={11} color="#fff" />
                           <Text style={s.lvPlayText}>{completed ? 'REPLAY' : 'PLAY'}</Text>
@@ -856,6 +857,7 @@ export default function Levels() {
                           style={s.lvBattleBtn}
                           onPress={(e) => {
                             e.stopPropagation();
+                            playTapSound(state.settings.sound).catch(() => {});
                             router.push(
                               `/battle?id=${selectedCategory.baseId}&categoryKey=${selectedCategory.id}&title=${encodeURIComponent(selectedCategory.name)}&difficulty=${difficulty}&level=${level}` as any
                             );
@@ -913,12 +915,13 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF', overflow: 'hidden',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)',
     flexShrink: 0,
+    marginBottom: 6,
   },
   avatarImg: { width: 40, height: 40 },
   avatarFallback: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,107,179,0.15)' },
 
   // ScrollView
-  scroll: { paddingTop: 4, paddingBottom: 128 },
+  scroll: { paddingTop: 4, paddingBottom: 160 },
 
   // Info card (level detail view)
   infoCard: {

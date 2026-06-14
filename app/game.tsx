@@ -35,7 +35,7 @@ import { FoundEntry, WordGrid } from "../components/WordGrid";
 import { CATEGORIES, STRIPE_COLORS } from "../constants/categories";
 import { Theme } from "../constants/theme";
 import * as Haptics from "expo-haptics";
-import { playGameSound, playWordCompleted, playCoinSound, playLevelUnlock } from "../lib/audio";
+import { playGameSound, playWordCompleted, playCoinSound, playLevelUnlock, playTapSound } from "../lib/audio";
 import { Confetti } from "../components/Confetti";
 import { FlyingLetters } from "../components/FlyingLetters";
 import { AnimatedEntry } from "../components/AnimatedEntry";
@@ -127,19 +127,23 @@ function makeUniqueLevelWords(
   categoryWords: string[],
   totalWords: number,
   levelIndex: number,
+  allWordCounts: number[],
 ) {
-  // Use ONLY this category's own words so every level stays on-theme. Words are
-  // offset per level so different levels show different subsets; when the
-  // category has fewer unique words than levels, subsets cycle/repeat (still
-  // always on-theme). Previously the global word pool leaked other categories'
-  // words into higher levels.
   const pool = Array.from(
     new Set(categoryWords.map((w) => w.toUpperCase().trim()).filter(Boolean)),
   );
   if (pool.length === 0) return [];
 
+  // Sum up the words shown in all previous levels so each level picks up
+  // exactly where the last one left off — no word repeats between consecutive
+  // levels until the whole pool has been cycled through.
+  let cumulativeOffset = 0;
+  for (let i = 0; i < levelIndex; i++) {
+    cumulativeOffset += Math.min(allWordCounts[i] ?? 0, pool.length);
+  }
+
   const count = Math.min(totalWords, pool.length);
-  const start = (levelIndex * count) % pool.length;
+  const start = cumulativeOffset % pool.length;
   const selected: string[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < pool.length && selected.length < count; i++) {
@@ -235,8 +239,8 @@ export default function Game() {
     diffCfg.wordCounts[levelIndex],
   );
   const levelWords = useMemo(
-    () => makeUniqueLevelWords(category.words, totalWords, levelIndex),
-    [category.words, totalWords, levelIndex],
+    () => makeUniqueLevelWords(category.words, totalWords, levelIndex, diffCfg.wordCounts),
+    [category.words, totalWords, levelIndex, diffCfg.wordCounts],
   );
   const progressKey = `${categoryKey}-${difficulty}-level-${levelNumber}`;
   const seed = `${category.id}-${difficulty}-${levelNumber}`;
@@ -1330,6 +1334,7 @@ export default function Game() {
         <View style={styles.header}>
           <Pressable
             onPress={() => {
+              playTapSound(state.settings.sound).catch(() => {});
               if (isLiveBattle && roomId && !battleFinishedReason) {
                 Alert.alert(
                   "Exit Battle?",

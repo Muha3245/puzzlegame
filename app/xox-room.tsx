@@ -36,7 +36,7 @@ import {
   XoxMoveBroadcast,
   XoxRoom,
 } from '../lib/online';
-import { playDrawSound, playLoseSound, playXoxMove, playBattleWin, playBgMusic, stopBgMusic } from '../lib/audio';
+import { playDrawSound, playLoseSound, playXoxMove, playBattleWin, playBgMusic, stopBgMusic, playTapSound } from '../lib/audio';
 import { useAppState } from '../lib/storage';
 
 type Mark = 'X' | 'O' | null;
@@ -273,7 +273,7 @@ export default function XoxRoomScreen() {
   // ── Battle music ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (state.settings.sound) playBgMusic('battle-loop', true).catch(() => {});
+    if (state.settings.sound) playBgMusic(true).catch(() => {});
     return () => stopBgMusic();
   }, [state.settings.sound]);
 
@@ -441,7 +441,7 @@ export default function XoxRoomScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <Text style={styles.errorText}>Game room not found.</Text>
-          <Pressable onPress={() => router.back()} style={styles.fallbackBtn}>
+          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.back(); }} style={styles.fallbackBtn}>
             <Text style={styles.fallbackBtnText}>Go Back</Text>
           </Pressable>
         </View>
@@ -455,7 +455,7 @@ export default function XoxRoomScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.back(); }} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </Pressable>
           <Text style={styles.headerTitle}>XOX Online</Text>
@@ -495,7 +495,7 @@ export default function XoxRoomScreen() {
       <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={handleQuit} style={styles.backBtn}>
+        <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); handleQuit(); }} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </Pressable>
         <Text style={styles.headerTitle}>XOX Online</Text>

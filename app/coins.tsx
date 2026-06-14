@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../lib/appTheme';
 import { useAppState } from '../lib/storage';
+import { playTapSound } from '../lib/audio';
 
 const ORANGE = '#D94F2B';
 const GREEN = '#4CC38A';
@@ -38,7 +39,7 @@ function totalCoins(pack: (typeof PACKS)[number]) {
 }
 
 export default function Coins() {
-  const { C, scheme, toggle } = useAppTheme();
+  const { C } = useAppTheme();
   const { state, addCoins } = useAppState();
   const insets = useSafeAreaInsets();
 
@@ -48,8 +49,8 @@ export default function Coins() {
 
   const selected = useMemo(() => PACKS.find((p) => p.id === selectedPack) ?? PACKS[2], [selectedPack]);
 
-  const balanceCardBg = scheme === 'dark' ? '#2A2725' : '#1C1C1E';
-  const packSelectedBg = scheme === 'dark' ? 'rgba(255,122,0,0.12)' : '#FFF8EC';
+  const balanceCardBg = '#1C1C1E';
+  const packSelectedBg = 'rgba(217,79,43,0.28)';
 
   const handleBuy = () => {
     if (busy) return;
@@ -72,15 +73,13 @@ export default function Coins() {
           styles.content,
           {
             paddingTop: insets.top,
-            paddingBottom: Platform.OS === 'ios'
-              ? Math.max(insets.bottom, 24) + 24
-              : Math.max(insets.bottom, 18) + 24,
+            paddingBottom: 160,
           },
         ]}
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.back(); }} style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
 
@@ -89,9 +88,7 @@ export default function Coins() {
             <Text style={[styles.headerSub, { color: C.muted }]}>Upgrade your game power</Text>
           </View>
 
-          <Pressable onPress={toggle} style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
-            <Ionicons name={scheme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={20} color={C.ink} />
-          </Pressable>
+          <View style={{ width: 42 }} />
         </View>
 
         {/* Balance card */}
@@ -133,12 +130,14 @@ export default function Coins() {
               <Pressable
                 key={pack.id}
                 onPress={() => setSelectedPack(pack.id)}
-                style={[
+                android_ripple={{ color: 'rgba(0,0,0,0.08)', borderless: false }}
+                style={({ pressed }) => [
                   styles.packCard,
                   {
                     backgroundColor: isSelected ? packSelectedBg : C.surface,
                     borderColor: isSelected ? ORANGE : pack.popular ? YELLOW : C.divider,
                     borderWidth: isSelected ? 2 : 1,
+                    opacity: pressed ? 0.88 : 1,
                   },
                 ]}
               >
@@ -174,7 +173,7 @@ export default function Coins() {
 
                 {isSelected && (
                   <View style={styles.selectedMark}>
-                    <Ionicons name="checkmark" size={13} color="#fff" />
+                    <Ionicons name="checkmark" size={13} color="#0e0b0b" />
                   </View>
                 )}
               </Pressable>

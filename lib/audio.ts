@@ -9,7 +9,7 @@ export type SoundName =
   | 'timerWarning' | 'xoxMove' | 'xoxWin' | 'friendRequest' | 'error';
 
 const SOUND_FILES: Record<SoundName, any> = {
-  tap:           require('../assets/sounds/tap.wav'),
+  tap:           require('../assets/sounds/freesoundeffects-button-click-289742.mp3'),
   wordFound:     require('../assets/sounds/word-found.wav'),
   win:           require('../assets/sounds/win.wav'),
   wrong:         require('../assets/sounds/wrong.wav'),
@@ -130,118 +130,29 @@ export async function unloadSounds() {
 
 // ── Background music ──────────────────────────────────────────────────────────
 
-export type BgTrack = 'puzzle-loop' | 'candy-loop' | 'forest-loop' | 'relax-loop' | 'battle-loop';
-
-const BG_FILES: Record<BgTrack, any> = {
-  'puzzle-loop': require('../assets/sounds/puzzle-loop.wav'),
-  'candy-loop':  require('../assets/sounds/candy-loop.wav'),
-  'forest-loop': require('../assets/sounds/forest-loop.wav'),
-  'relax-loop':  require('../assets/sounds/relax-loop.wav'),
-  'battle-loop': require('../assets/sounds/battle-loop.wav'),
-};
-
-// ── Single-player background engine ─────────────────────────────────────────
-// Guarantees exactly ONE background track is ever audible. A generation token
-// invalidates any in-flight "track finished → play next" callbacks the moment
-// the background is stopped or switched, so tracks can never overlap (the old
-// "2–3 sounds at once" bug).
-
-let bgPlayer: AudioPlayer | null = null;
-let bgCurrent: BgTrack | null = null;
-let bgMode: 'off' | 'shuffle' | 'single' = 'off';
-let bgStatusSub: { remove: () => void } | null = null;
-let bgGen = 0; // bumped on every stop/switch — stale callbacks compare against it
-
+const BG_FILE = require('../assets/sounds/Calima - Glass Shop (freetouse.com).mp3');
 const BG_VOLUME = 0.16;
 
-// Ambient pool for the global background. 'battle-loop' is intentionally
-// excluded — it's reserved for the in-battle screens.
-const AMBIENT_TRACKS: BgTrack[] = [
-  'puzzle-loop',
-  'candy-loop',
-  'forest-loop',
-  'relax-loop',
-];
+let bgPlayer: AudioPlayer | null = null;
 
-function pickRandomTrack(exclude: BgTrack | null): BgTrack {
-  const pool = AMBIENT_TRACKS.filter((t) => t !== exclude);
-  const list = pool.length ? pool : AMBIENT_TRACKS;
-  return list[Math.floor(Math.random() * list.length)];
-}
-
-// Tears down the current player + listener. Does NOT change mode/gen.
 function teardownBgPlayer() {
-  try { bgStatusSub?.remove(); } catch {}
-  bgStatusSub = null;
   releasePlayer(bgPlayer);
   bgPlayer = null;
-  bgCurrent = null;
 }
 
-// A single looping track — used for the in-battle screens (e.g. 'battle-loop').
-export async function playBgMusic(track: BgTrack = 'puzzle-loop', enabled: boolean) {
+export async function playBgMusic(enabled: boolean) {
   if (!enabled) { stopBgMusic(); return; }
   try {
     await setupAudio();
-    if (bgMode === 'single' && bgCurrent === track && bgPlayer) return;
-
-    const gen = ++bgGen; // invalidate any pending shuffle callback
-    bgMode = 'single';
-    teardownBgPlayer();
-    if (gen !== bgGen) return;
-
-    const player = createAudioPlayer(BG_FILES[track]);
+    if (bgPlayer) return;
+    const player = createAudioPlayer(BG_FILE);
     player.volume = BG_VOLUME;
     player.loop = true;
     bgPlayer = player;
-    bgCurrent = track;
     player.play();
   } catch {}
 }
 
-// Standard "gaming background": plays the ambient tracks one-by-one (sequential
-// shuffle). Each track plays fully, then a different one starts — never layered.
-export async function playShuffledBgMusic(enabled: boolean) {
-  if (!enabled) { stopBgMusic(); return; }
-  try {
-    await setupAudio();
-    if (bgMode === 'shuffle' && bgPlayer) return; // already running, don't stack
-
-    const gen = ++bgGen;
-    bgMode = 'shuffle';
-    teardownBgPlayer();
-    if (gen !== bgGen) return;
-    playNextShuffleTrack(gen, null);
-  } catch {}
-}
-
-function playNextShuffleTrack(gen: number, exclude: BgTrack | null) {
-  // Bail if this chain has been superseded (stopped or switched).
-  if (gen !== bgGen || bgMode !== 'shuffle') return;
-
-  teardownBgPlayer();
-  if (gen !== bgGen || bgMode !== 'shuffle') return;
-
-  const track = pickRandomTrack(exclude);
-  const player = createAudioPlayer(BG_FILES[track]);
-  player.volume = BG_VOLUME;
-  player.loop = false;
-  bgPlayer = player;
-  bgCurrent = track;
-
-  try {
-    bgStatusSub = player.addListener('playbackStatusUpdate', (status: any) => {
-      if (status?.didJustFinish && gen === bgGen && bgMode === 'shuffle') {
-        playNextShuffleTrack(gen, track);
-      }
-    });
-  } catch {}
-
-  player.play();
-}
-
 export function stopBgMusic() {
-  bgGen++; // invalidate any pending shuffle callback so nothing restarts
-  bgMode = 'off';
   teardownBgPlayer();
 }
