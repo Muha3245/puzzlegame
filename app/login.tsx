@@ -110,7 +110,7 @@ export default function LoginScreen() {
   const isLogin = mode === 'login';
 
   return (
-    <ImageBackground source={require('../assets/images/background.png')} style={styles.bg} resizeMode="cover">
+    <ImageBackground source={require('../assets/images/wordrush-arena-background.png')} style={styles.bg} resizeMode="cover">
       <View style={styles.overlay} />
       <View style={styles.orb1} />
       <View style={styles.orb2} />
@@ -128,8 +128,8 @@ export default function LoginScreen() {
               <View style={styles.logoRing}>
                 <LogoIcon size={48} />
               </View>
-              <Text style={styles.appName}>WordPuzzle</Text>
-              <Text style={styles.tagline}>Train your mind, one word at a time</Text>
+              <Text style={styles.appName}>WordRush Arena</Text>
+              <Text style={styles.tagline}>Word puzzles, XOX, and live battles</Text>
             </View>
 
             {/* ── Glass card ── */}
@@ -355,3 +355,4 @@ const styles = StyleSheet.create({
   switchText: { color: Theme.textDim, fontSize: 14, fontWeight: '600' },
   switchLink: { color: Theme.primary, fontWeight: '900' },
 });
+

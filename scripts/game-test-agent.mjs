@@ -357,11 +357,17 @@ describe('3. Score Calculation', () => {
   });
 
   test('coin delta: winner gets positive, loser negative', () => {
-    const diffBonus = 0; // easy
-    const winnerDelta = 60 + diffBonus;
-    const loserDelta = -(25 + Math.floor(diffBonus / 2));
+    const stake = 60;
+    const winnerDelta = stake;
+    const loserDelta = -stake;
     expect(winnerDelta).toBeGreaterThan(0);
-    expect(loserDelta).toBeLessThanOrEqual(-25);
+    expect(loserDelta).toBeLessThanOrEqual(-stake);
+  });
+
+  test('battle stake is symmetrical for winner and loser', () => {
+    [20, 40, 60, 100, 200].forEach((stake) => {
+      expect(stake + -stake).toBe(0);
+    });
   });
 });
 

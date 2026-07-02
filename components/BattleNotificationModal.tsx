@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Theme } from '../constants/theme';
 import { BattleRoom } from '../lib/online';
+import { DEFAULT_BATTLE_STAKE } from '../lib/battleEconomy';
 
 interface Props {
   room: BattleRoom | null;
@@ -56,6 +57,7 @@ export function BattleNotificationModal({ room, onAccept, onReject, acceptBusy }
   if (!room) return null;
 
   const diffColor = DIFF_COLORS[room.difficulty] ?? Theme.primary;
+  const stakeCoins = room.stakeCoins ?? DEFAULT_BATTLE_STAKE;
 
   const dismiss = () => {
     Animated.parallel([
@@ -111,7 +113,7 @@ export function BattleNotificationModal({ room, onAccept, onReject, acceptBusy }
         {/* Coin info */}
         <View style={styles.rewardRow}>
           <Ionicons name="logo-bitcoin" size={13} color={Theme.warn} />
-          <Text style={styles.rewardText}>Win to earn coins • Lose costs coins</Text>
+          <Text style={styles.rewardText}>Winner +{stakeCoins} • Loser -{stakeCoins}</Text>
         </View>
 
         {/* Buttons */}

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS public.battle_rooms (
   category_title TEXT       NOT NULL,
   difficulty    TEXT        NOT NULL DEFAULT 'easy',
   level         INTEGER     NOT NULL DEFAULT 1,
+  stake_coins   INTEGER     NOT NULL DEFAULT 60 CHECK (stake_coins > 0),
   winner_id     TEXT,
   created_at    TIMESTAMPTZ DEFAULT now(),
   updated_at    TIMESTAMPTZ DEFAULT now()

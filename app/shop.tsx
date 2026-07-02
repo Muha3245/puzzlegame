@@ -1,11 +1,11 @@
 // app/shop.tsx
 // Coin shop modal — pack picker + payment methods + buy button.
 
-import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Sheet } from '../components/Sheet';
 import { Theme } from '../constants/theme';
+import { goBackOrHome } from '../lib/navigation';
 import { useAppState } from '../lib/storage';
 
 const PACKS = [
@@ -30,7 +30,7 @@ export default function Shop() {
 
   const selected = PACKS.find((p) => p.id === pack)!;
 
-  const close = () => router.back();
+  const close = goBackOrHome;
 
   const buy = () => {
     setBusy('processing');

@@ -17,6 +17,7 @@ import { CATEGORIES } from '../constants/categories';
 import { Theme } from '../constants/theme';
 import { useAppState, getAppSettings } from '../lib/storage';
 import { playTapSound } from '../lib/audio';
+import { goBackOrHome } from '../lib/navigation';
 import { Ionicons } from '@expo/vector-icons';
 
 const LEVELS_PER_CATEGORY = 8;
@@ -605,9 +606,9 @@ function DifficultyTabs({ active, onChange }: { active: DifficultyId; onChange: 
 
 const dt = StyleSheet.create({
   row:        { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  pill:       { flex: 1, paddingVertical: 11, borderRadius: 99, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: 'rgba(168,148,228,0.40)' },
+  pill:       { flex: 1, paddingVertical: 11, borderRadius: 99, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.10)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.16)' },
   pillActive: { backgroundColor: DEEP_PINK, borderColor: DEEP_PINK },
-  label:      { fontSize: 12, fontWeight: '800', color: '#8B7EB5', letterSpacing: 0.3 },
+  label:      { fontSize: 12, fontWeight: '800', color: 'rgba(255,255,255,0.70)', letterSpacing: 0.3 },
   labelActive:{ color: '#FFFFFF' },
 });
 
@@ -706,7 +707,8 @@ export default function Levels() {
 
   return (
     <View style={s.root}>
-      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={require('../assets/images/wordrush-arena-background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <View style={s.backdropTint} />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <FloatingMascot />
       <SafeAreaView edges={['top','left','right']} style={s.safe}>
@@ -715,9 +717,16 @@ export default function Levels() {
         <View style={s.header}>
           <Pressable
             style={s.backBtn}
-            onPress={() => { playTapSound(state.settings.sound).catch(() => {}); selectedCategory ? router.replace(`/levels?difficulty=${difficulty}`) : router.back(); }}
+            onPress={() => {
+              playTapSound(state.settings.sound).catch(() => {});
+              if (selectedCategory) {
+                router.replace(`/levels?difficulty=${difficulty}`);
+                return;
+              }
+              goBackOrHome();
+            }}
           >
-            <Ionicons name="chevron-back" size={22} color="#1A0845" />
+            <Ionicons name="chevron-back" size={22} color="#fff" />
           </Pressable>
           <Text style={s.headerTitle} numberOfLines={1}>
             {selectedCategory ? selectedCategory.name.toUpperCase() : 'CATEGORIES'}
@@ -885,35 +894,44 @@ export default function Levels() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#2A0A80' },
+  root: { flex: 1, backgroundColor: '#05091C' },
+  backdropTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(5,9,28,0.34)',
+  },
   safe: { flex: 1 },
 
   // Header
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, gap: 8,
+    backgroundColor: 'rgba(5,9,28,0.18)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.10)',
   },
   backBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#8B5CF6', shadowOpacity: 0.15, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, elevation: 3,
+    backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.20)',
     flexShrink: 0,
   },
   headerTitle: {
-    fontSize: 24, fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.3,
+    fontSize: 23, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0,
     textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   coinPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#FFFFFF', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 7,
-    shadowColor: GOLD, shadowOpacity: 0.2, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, elevation: 3,
+    backgroundColor: 'rgba(255,210,63,0.18)', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(255,210,63,0.35)',
     flexShrink: 0,
   },
-  coinText: { fontSize: 13, fontWeight: '900', color: '#1A0845' },
+  coinText: { fontSize: 13, fontWeight: '900', color: '#fff' },
   avatarRing: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#FFFFFF', overflow: 'hidden',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'rgba(255,255,255,0.13)', overflow: 'hidden',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.24)',
     flexShrink: 0,
     marginBottom: 6,
   },
@@ -926,36 +944,38 @@ const s = StyleSheet.create({
   // Info card (level detail view)
   infoCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 14, marginBottom: 16,
-    shadowColor: '#8B5CF6', shadowOpacity: 0.12, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 5,
+    backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 18, padding: 14, marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   infoIcon: {
     width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   infoBody: { flex: 1, minWidth: 0 },
-  infoTitle: { fontSize: 17, fontWeight: '900', color: '#1A0845', marginBottom: 4 },
-  infoDesc:  { fontSize: 12, color: '#8B7EB5', lineHeight: 17, marginBottom: 8 },
+  infoTitle: { fontSize: 17, fontWeight: '900', color: '#fff', marginBottom: 4 },
+  infoDesc:  { fontSize: 12, color: 'rgba(255,255,255,0.72)', lineHeight: 17, marginBottom: 8 },
   infoTags:  { flexDirection: 'row', gap: 6 },
-  tagPink:   { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99, backgroundColor: '#FFEAF3' },
-  tagPinkText:   { fontSize: 10, fontWeight: '800', color: DEEP_PINK, letterSpacing: 0.4 },
-  tagPurple: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99, backgroundColor: '#F0EAFF' },
-  tagPurpleText: { fontSize: 10, fontWeight: '800', color: PURPLE_BTN, letterSpacing: 0.4 },
+  tagPink:   { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99, backgroundColor: 'rgba(255,107,179,0.20)', borderWidth: 1, borderColor: 'rgba(255,107,179,0.35)' },
+  tagPinkText:   { fontSize: 10, fontWeight: '800', color: '#FFB3D8', letterSpacing: 0.4 },
+  tagPurple: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99, backgroundColor: 'rgba(142,107,255,0.20)', borderWidth: 1, borderColor: 'rgba(142,107,255,0.35)' },
+  tagPurpleText: { fontSize: 10, fontWeight: '800', color: '#D2C5FF', letterSpacing: 0.4 },
 
   // Category grid
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   catCard: {
-    borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', paddingBottom: 12, overflow: 'hidden',
-    shadowColor: '#8B5CF6', shadowOpacity: 0.12, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 5,
+    borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.10)', alignItems: 'center', paddingBottom: 12, overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   catIconBg: {
     width: '100%', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 16, marginBottom: 8, position: 'relative',
   },
   catDonePin: { position: 'absolute', bottom: 8, right: 18 },
-  catName:    { fontSize: 12, fontWeight: '900', color: '#1A0845', textAlign: 'center', paddingHorizontal: 8, marginBottom: 5 },
+  catName:    { fontSize: 12, fontWeight: '900', color: '#fff', textAlign: 'center', paddingHorizontal: 8, marginBottom: 5 },
   catStars:   { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 6 },
-  catProgress:{ fontSize: 9, fontWeight: '800', color: '#8B7EB5', marginLeft: 4 },
-  catTrack:   { width: '80%', height: 4, borderRadius: 99, backgroundColor: 'rgba(168,148,228,0.2)', overflow: 'hidden', marginBottom: 8 },
+  catProgress:{ fontSize: 9, fontWeight: '800', color: 'rgba(255,255,255,0.68)', marginLeft: 4 },
+  catTrack:   { width: '80%', height: 4, borderRadius: 99, backgroundColor: 'rgba(255,255,255,0.16)', overflow: 'hidden', marginBottom: 8 },
   catFill:    { height: '100%', borderRadius: 99 },
   catBtn:     { width: '80%', paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   catBtnText: { color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
@@ -964,36 +984,36 @@ const s = StyleSheet.create({
     position: 'absolute', right: -1, top: -1,
     width: 45, height: 45, borderBottomLeftRadius: 13,
     backgroundColor: '#d60083', alignItems: 'center', justifyContent: 'center',
-    borderLeftWidth: 2, borderBottomWidth: 2, borderColor: '#fff4b8',
+    borderLeftWidth: 2, borderBottomWidth: 2, borderColor: 'rgba(255,244,184,0.9)',
   },
   premiumPrice: { position: 'absolute', bottom: 3, color: '#fff', fontSize: 9, fontWeight: '900' },
 
   // Level grid
   lvGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   lvCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 18,
     paddingHorizontal: 12, paddingTop: 12, paddingBottom: 10,
     alignItems: 'center',
-    shadowColor: '#8B5CF6', shadowOpacity: 0.12, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   lvLocked: { opacity: 0.55 },
   lvStars:  { flexDirection: 'row', gap: 3, alignSelf: 'flex-start', marginBottom: 8 },
 
   lvBadge: {
     width: 62, height: 62, borderRadius: 31,
-    borderWidth: 2.5, borderColor: PURPLE_BTN, backgroundColor: '#FFFFFF',
+    borderWidth: 2.5, borderColor: '#9E8CFF', backgroundColor: 'rgba(255,255,255,0.10)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 8,
-    shadowColor: PURPLE_BTN, shadowOpacity: 0.20, shadowOffset: { width: 0, height: 3 }, shadowRadius: 6, elevation: 3,
   },
   lvBadgeDone: { backgroundColor: PURPLE_BTN, borderColor: PURPLE_BTN },
-  lvBadgeGray: { borderColor: '#C4B8E0', backgroundColor: '#F5F0FF', shadowOpacity: 0 },
-  lvNum: { color: PURPLE_BTN, fontWeight: '900', fontSize: 22 },
+  lvBadgeGray: { borderColor: 'rgba(255,255,255,0.24)', backgroundColor: 'rgba(255,255,255,0.08)' },
+  lvNum: { color: '#fff', fontWeight: '900', fontSize: 22 },
 
-  lvTitle: { fontWeight: '900', fontSize: 13, color: '#1A0845', marginBottom: 2, textAlign: 'center' },
-  lvMeta:  { fontSize: 10, fontWeight: '700', color: '#8B7EB5', textAlign: 'center', marginBottom: 6 },
-  lvFound: { fontSize: 10, fontWeight: '800', color: DEEP_PINK, marginBottom: 4 },
+  lvTitle: { fontWeight: '900', fontSize: 13, color: '#fff', marginBottom: 2, textAlign: 'center' },
+  lvMeta:  { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.68)', textAlign: 'center', marginBottom: 6 },
+  lvFound: { fontSize: 10, fontWeight: '800', color: '#FFB3D8', marginBottom: 4 },
 
-  lvTrack: { width: '100%', height: 5, borderRadius: 99, backgroundColor: 'rgba(168,148,228,0.2)', overflow: 'hidden', marginBottom: 8 },
+  lvTrack: { width: '100%', height: 5, borderRadius: 99, backgroundColor: 'rgba(255,255,255,0.16)', overflow: 'hidden', marginBottom: 8 },
   lvFill:  { height: '100%', borderRadius: 99 },
 
   lvActions: { flexDirection: 'row', alignItems: 'center', gap: 6, width: '100%' },
@@ -1008,7 +1028,8 @@ const s = StyleSheet.create({
   },
   lvLockedRow: {
     width: '100%', paddingVertical: 8, borderRadius: 10,
-    borderWidth: 1.5, borderColor: '#C4B8E0', alignItems: 'center', justifyContent: 'center', marginTop: 2,
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center', marginTop: 2,
   },
-  lvLockedText: { color: '#C4B8E0', fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
+  lvLockedText: { color: 'rgba(255,255,255,0.62)', fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
 });
+

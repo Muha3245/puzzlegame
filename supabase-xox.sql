@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS public.xox_rooms (
   current_turn  TEXT        NOT NULL DEFAULT 'X',    -- 'X' or 'O'
   winner        TEXT,                                -- 'X', 'O', 'draw', or NULL
   winner_id     TEXT,
+  stake_coins   INTEGER     NOT NULL DEFAULT 60 CHECK (stake_coins > 0),
   created_at    TIMESTAMPTZ DEFAULT now(),
   updated_at    TIMESTAMPTZ DEFAULT now()
 );

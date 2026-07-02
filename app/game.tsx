@@ -44,6 +44,7 @@ import {
   BattleChatMessage,
   BattlePlayerState,
   BattleRoom,
+  applyOnlineCoinDelta,
   completeOnlineLevel,
   ensureBattlePlayerRows,
   getBattlePlayers,
@@ -57,6 +58,7 @@ import {
   finishBattleRoomNow,
   quitBattleRoom,
 } from "../lib/online";
+import { DEFAULT_BATTLE_STAKE, sanitizeBattleStake } from "../lib/battleEconomy";
 import { buildPuzzle } from "../lib/puzzle";
 import { useAppState } from "../lib/storage";
 import { Image } from "expo-image";
@@ -430,6 +432,7 @@ export default function Game() {
   const opponentBattleState = battlePlayers.find((p) => p.userId !== myUid);
   // Always use local found state for my score (instant, no DB lag)
   const myLiveScore = found.length * 10;
+  const battleStake = sanitizeBattleStake(battleRoom?.stakeCoins ?? DEFAULT_BATTLE_STAKE);
   const opponentLiveScore = Math.max(
     opponentBattleState?.score ?? 0,
     opponentFoundEntries.length * 10,
@@ -1230,21 +1233,20 @@ export default function Game() {
         opponentBattleState?.wordsFound ?? 0,
         opponentFoundEntries.length,
       );
-      const iWon = battleWinnerId
-        ? battleWinnerId === myUidRef.current
-        : myWords > oppWords || (myWords === oppWords && s1 >= s2);
-      // Coin rewards: winner gets +60, loser loses -25 (per difficulty scaling)
-      const diffBonus =
-        difficulty === "medium"
-          ? 10
-          : difficulty === "hard"
-            ? 25
-            : difficulty === "pro"
-              ? 50
-              : 0;
-      const coinDelta = iWon
-        ? 60 + diffBonus
-        : -(25 + Math.floor(diffBonus / 2));
+      let iWon = false;
+      let isDraw = false;
+
+      if (battleWinnerId) {
+        iWon = battleWinnerId === myUidRef.current;
+      } else if (myWords > oppWords || (myWords === oppWords && s1 > s2)) {
+        iWon = true;
+      } else if (oppWords > myWords || (myWords === oppWords && s2 > s1)) {
+        iWon = false;
+      } else {
+        isDraw = true;
+      }
+
+      const coinDelta = isDraw ? 0 : iWon ? battleStake : -battleStake;
       const opponentId =
         opponentBattleState?.userId ??
         (battleRoom
@@ -1253,7 +1255,7 @@ export default function Game() {
             : battleRoom.player1Id
           : "");
       router.replace(
-        `/winner?winner=${encodeURIComponent(iWon ? myName : oppName)}&p1=${encodeURIComponent(myName)}&p2=${encodeURIComponent(oppName)}&s1=${s1}&s2=${s2}&coins=${coinDelta}&id=${category.id}&categoryKey=${categoryKey}&title=${encodeURIComponent(displayTitle)}&difficulty=${difficulty}&level=${levelNumber}&isBattle=1&opponentId=${encodeURIComponent(opponentId || "")}&opponentName=${encodeURIComponent(oppName)}`,
+        `/winner?winner=${encodeURIComponent(isDraw ? 'Tie!' : iWon ? myName : oppName)}&p1=${encodeURIComponent(myName)}&p2=${encodeURIComponent(oppName)}&s1=${s1}&s2=${s2}&coins=${coinDelta}&stake=${battleStake}&id=${category.id}&categoryKey=${categoryKey}&title=${encodeURIComponent(displayTitle)}&difficulty=${difficulty}&level=${levelNumber}&isBattle=1&opponentId=${encodeURIComponent(opponentId || "")}&opponentName=${encodeURIComponent(oppName)}`,
       );
       return;
     }
@@ -1318,7 +1320,7 @@ export default function Game() {
   // ── Render ──
   return (
     <ImageBackground
-      source={require('../assets/images/background.png')}
+      source={require('../assets/images/wordrush-arena-background.png')}
       style={styles.bg}
       resizeMode="cover"
     >
@@ -1338,14 +1340,15 @@ export default function Game() {
               if (isLiveBattle && roomId && !battleFinishedReason) {
                 Alert.alert(
                   "Exit Battle?",
-                  `If you exit now, 15 coins will be deducted from your balance.`,
+                  `If you exit now, your opponent wins and ${battleStake} coins will be deducted.`,
                   [
                     { text: "Stay", style: "cancel" },
                     {
-                      text: "Exit & Lose Coins",
+                      text: "Exit & Lose",
                       style: "destructive",
                       onPress: async () => {
-                        addCoins(-15);
+                        addCoins(-battleStake);
+                        applyOnlineCoinDelta(-battleStake).catch(() => {});
                         await quitBattleRoom(roomId).catch(() => {});
                         router.replace("/battle");
                       },
@@ -3168,3 +3171,4 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: Theme.textDim, fontSize: 15, fontWeight: "800" },
 });
+

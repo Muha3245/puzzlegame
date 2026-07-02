@@ -3,7 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,12 +28,12 @@ import {
   searchPlayers,
   sendFriendRequest,
 } from '../lib/online';
-import { notifyFriendRequest } from '../lib/notifications';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { SkeletonCard, SkeletonSection } from '../components/SkeletonLoader';
 import { Theme } from '../constants/theme';
 import { useAppTheme } from '../lib/appTheme';
 import { playTapSound } from '../lib/audio';
+import { goBackOrHome } from '../lib/navigation';
 import { getAppSettings } from '../lib/storage';
 
 export default function FriendsScreen() {
@@ -43,7 +43,10 @@ export default function FriendsScreen() {
   const [friends, setFriends] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const prevRequestsRef = useRef<string[]>([]);
+  const friendIds = useMemo(
+    () => new Set(friends.map((friend) => friend.uid).filter(Boolean)),
+    [friends],
+  );
 
   const load = async () => {
     setLoading(true);
@@ -56,14 +59,6 @@ export default function FriendsScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  // Notify on new friend requests
-  useEffect(() => {
-    const prev = prevRequestsRef.current;
-    const newOnes = requests.filter((r) => !prev.includes(r.id));
-    newOnes.forEach((r) => notifyFriendRequest(r.fromName).catch(() => {}));
-    prevRequestsRef.current = requests.map((r) => r.id);
-  }, [requests]);
-
   // Live search: as the user types we debounce and query. When the box is
   // empty we show suggested players (top by score) so the list is never blank.
   useEffect(() => {
@@ -75,7 +70,8 @@ export default function FriendsScreen() {
       try {
         if (alive) setSearching(true);
         const results = q ? await searchPlayers(q) : await getSuggestedPlayers();
-        if (alive) setPlayers(results);
+        const filtered = results.filter((player) => !friendIds.has(player.uid));
+        if (alive) setPlayers(filtered);
       } catch {
         if (alive) setPlayers([]);
       } finally {
@@ -87,7 +83,7 @@ export default function FriendsScreen() {
       alive = false;
       clearTimeout(t);
     };
-  }, [search]);
+  }, [friendIds, search]);
 
   const sendRequest = async (player: PublicUser) => {
     try {
@@ -136,12 +132,12 @@ export default function FriendsScreen() {
 
   return (
     <View style={styles.bg}>
-      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={require('../assets/images/wordrush-arena-background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
-          <Pressable onPress={() => { playTapSound(getAppSettings().sound).catch(() => {}); router.back(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Pressable onPress={() => { playTapSound(getAppSettings().sound).catch(() => {}); goBackOrHome(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
           <View style={styles.titleWrap}>
@@ -357,3 +353,4 @@ const styles = StyleSheet.create({
   battleBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999, backgroundColor: 'rgba(255,210,63,0.16)', borderWidth: 1, borderColor: 'rgba(255,210,63,0.35)' },
   battleBtnText: { color: Theme.warn, fontWeight: '900', fontSize: 13 },
 });
+

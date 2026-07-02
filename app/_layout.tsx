@@ -7,21 +7,30 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider } from '../lib/appTheme';
 import BottomTabBar from '../components/BottomTabBar';
-import { playBgMusic, stopBgMusic } from '../lib/audio';
-import { useAppState } from '../lib/storage';
+import { playBattleRequestSound, playBgMusic, playFriendRequest, stopBgMusic } from '../lib/audio';
+import { getAppSettings, useAppState } from '../lib/storage';
 import {
   acceptBattleRoom,
+  acceptFriendRequest,
   acceptXoxRoom,
   BattleRoom,
+  FriendRequest,
   getCurrentUserId,
+  rejectFriendRequest,
   rejectBattleRoom,
   rejectXoxRoom,
+  subscribeToIncomingFriendRequests,
   subscribeToIncomingBattles,
   subscribeToIncomingXox,
   XoxRoom,
 } from '../lib/online';
+import { supabase } from '../lib/supabase';
 import { BattleNotificationModal } from '../components/BattleNotificationModal';
+import { FriendRequestNotificationModal } from '../components/FriendRequestNotificationModal';
 import { XoxNotificationModal } from '../components/XoxNotificationModal';
+import { DEFAULT_BATTLE_STAKE } from '../lib/battleEconomy';
+
+const ARENA_NAV_BACKGROUND = '#05091C';
 
 function AppShell() {
   const pathname = usePathname();
@@ -44,6 +53,10 @@ function AppShell() {
   const [xoxAcceptBusy, setXoxAcceptBusy] = useState(false);
   const shownXoxIds = useRef<Set<string>>(new Set());
 
+  const [pendingFriend, setPendingFriend] = useState<FriendRequest | null>(null);
+  const [friendAcceptBusy, setFriendAcceptBusy] = useState(false);
+  const shownFriendIds = useRef<Set<string>>(new Set());
+
   const hideBottomTab = useMemo(() => {
     const hiddenRoutes = [
       '/login',
@@ -64,43 +77,63 @@ function AppShell() {
   }, [pathname]);
 
   useEffect(() => {
-    let cleanup: (() => void) | undefined;
+    let cleanups: (() => void)[] = [];
 
-    getCurrentUserId()
-      .then((uid) => {
-        if (!uid) return;
+    const clearRealtime = () => {
+      cleanups.forEach((cleanup) => cleanup());
+      cleanups = [];
+    };
 
-        cleanup = subscribeToIncomingBattles(uid, (room: BattleRoom) => {
+    const subscribeForUser = (uid: string | null) => {
+      clearRealtime();
+      if (!uid) return;
+
+      cleanups = [
+        subscribeToIncomingBattles(uid, (room: BattleRoom) => {
           if (shownRoomIds.current.has(room.id)) return;
           shownRoomIds.current.add(room.id);
+          playBattleRequestSound(getAppSettings().sound).catch(() => {});
           setPendingBattle(room);
-        });
-      })
-      .catch(() => {});
-
-    return () => cleanup?.();
-  }, []);
-
-  useEffect(() => {
-    let cleanupXox: (() => void) | undefined;
-
-    getCurrentUserId()
-      .then((uid) => {
-        if (!uid) return;
-
-        cleanupXox = subscribeToIncomingXox(uid, (room: XoxRoom) => {
+        }),
+        subscribeToIncomingXox(uid, (room: XoxRoom) => {
           if (shownXoxIds.current.has(room.id)) return;
           shownXoxIds.current.add(room.id);
+          playBattleRequestSound(getAppSettings().sound).catch(() => {});
           setPendingXox(room);
-        });
-      })
+        }),
+        subscribeToIncomingFriendRequests(uid, (request: FriendRequest) => {
+          if (shownFriendIds.current.has(request.id)) return;
+          shownFriendIds.current.add(request.id);
+          playFriendRequest(getAppSettings().sound).catch(() => {});
+          setPendingFriend(request);
+        }),
+      ];
+    };
+
+    getCurrentUserId()
+      .then((uid) => subscribeForUser(uid))
       .catch(() => {});
 
-    return () => cleanupXox?.();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => subscribeForUser(session?.user?.id ?? null),
+    );
+
+    return () => {
+      subscription.unsubscribe();
+      clearRealtime();
+    };
   }, []);
 
   const handleAccept = async () => {
     if (!pendingBattle) return;
+    const battleStake = pendingBattle.stakeCoins ?? DEFAULT_BATTLE_STAKE;
+    if (state.coins < battleStake) {
+      Alert.alert(
+        'Not enough coins',
+        `This battle needs ${battleStake} coins. Your balance is ${state.coins}.`,
+      );
+      return;
+    }
 
     setAcceptBusy(true);
 
@@ -131,6 +164,14 @@ function AppShell() {
 
   const handleXoxAccept = async () => {
     if (!pendingXox) return;
+    const xoxStake = pendingXox.stakeCoins ?? DEFAULT_BATTLE_STAKE;
+    if (state.coins < xoxStake) {
+      Alert.alert(
+        'Not enough coins',
+        `This XOX battle needs ${xoxStake} coins. Your balance is ${state.coins}.`,
+      );
+      return;
+    }
 
     setXoxAcceptBusy(true);
 
@@ -159,6 +200,27 @@ function AppShell() {
     setPendingXox(null);
   };
 
+  const handleFriendAccept = async () => {
+    if (!pendingFriend) return;
+
+    setFriendAcceptBusy(true);
+    try {
+      await acceptFriendRequest(pendingFriend);
+      setPendingFriend(null);
+    } catch {
+      Alert.alert('Error', 'Could not accept friend request. Try from Friends.');
+    } finally {
+      setFriendAcceptBusy(false);
+    }
+  };
+
+  const handleFriendReject = () => {
+    if (!pendingFriend) return;
+
+    rejectFriendRequest(pendingFriend).catch(() => {});
+    setPendingFriend(null);
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
@@ -168,9 +230,9 @@ function AppShell() {
           screenOptions={{
             headerShown: false,
             animation: 'slide_from_right',
-            animationDuration: 260,
+            animationDuration: 220,
             contentStyle: {
-              backgroundColor: '#2A0A80',
+              backgroundColor: ARENA_NAV_BACKGROUND,
             },
           }}
         >
@@ -216,6 +278,13 @@ function AppShell() {
         onReject={handleXoxReject}
         acceptBusy={xoxAcceptBusy}
       />
+
+      <FriendRequestNotificationModal
+        request={pendingFriend}
+        onAccept={handleFriendAccept}
+        onReject={handleFriendReject}
+        acceptBusy={friendAcceptBusy}
+      />
     </View>
   );
 }
@@ -231,13 +300,16 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: ARENA_NAV_BACKGROUND,
   },
 
   stackWrap: {
     flex: 1,
+    backgroundColor: ARENA_NAV_BACKGROUND,
   },
 
   stackWithTab: {
     paddingBottom: 90,
+    backgroundColor: ARENA_NAV_BACKGROUND,
   },
 });

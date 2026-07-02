@@ -1,11 +1,11 @@
 // app/help.tsx
 // How-to-play modal with numbered steps.
 
-import { router } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Sheet } from '../components/Sheet';
 import { Theme } from '../constants/theme';
+import { goBackOrHome } from '../lib/navigation';
 
 const STEPS = [
   { n: '1', title: 'Find hidden words',        body: 'Words are placed horizontally, vertically, or diagonally — forwards and backwards.' },
@@ -16,7 +16,7 @@ const STEPS = [
 
 export default function Help() {
   return (
-    <Sheet visible title="How to Play" onClose={() => router.back()}>
+    <Sheet visible title="How to Play" onClose={goBackOrHome}>
       <View style={{ gap: 12 }}>
         {STEPS.map((s) => (
           <View key={s.n} style={styles.step}>

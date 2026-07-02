@@ -3,7 +3,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
-import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -23,6 +22,7 @@ import { useAppTheme } from "../lib/appTheme";
 import { getGlobalLeaderboard, getMyProfile, PublicUser } from "../lib/online";
 import { playTapSound } from "../lib/audio";
 import { getAppSettings } from "../lib/storage";
+import { goBackOrHome } from "../lib/navigation";
 
 type LeaderboardUser = PublicUser & { rank: number };
 
@@ -288,14 +288,14 @@ export default function LeaderboardScreen() {
 
   return (
     <View style={styles.bg}>
-      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={require('../assets/images/wordrush-arena-background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable
-            onPress={() => { playTapSound(getAppSettings().sound).catch(() => {}); router.back(); }}
+            onPress={() => { playTapSound(getAppSettings().sound).catch(() => {}); goBackOrHome(); }}
             style={[
               styles.backBtn,
               {

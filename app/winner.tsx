@@ -17,14 +17,16 @@ import {
   getBattleRooms,
   PublicUser,
   rejectBattleRoom,
+  applyOnlineCoinDelta,
 } from '../lib/online';
 import { getRandomBattleLevel } from '../lib/battleHelpers';
 import { DifficultyPickerModal } from '../components/DifficultyPickerModal';
+import { DEFAULT_BATTLE_STAKE, sanitizeBattleStake } from '../lib/battleEconomy';
 
 export default function Winner() {
   const params = useLocalSearchParams<{
     winner?: string; p1?: string; p2?: string;
-    s1?: string; s2?: string; coins?: string;
+    s1?: string; s2?: string; coins?: string; stake?: string;
     id?: string; categoryKey?: string; difficulty?: string; level?: string;
     isBattle?: string; title?: string; opponentId?: string; opponentName?: string;
   }>();
@@ -72,8 +74,9 @@ export default function Winner() {
   const s1        = Number(params.s1 ?? 0);
   const s2        = Number(params.s2 ?? 0);
   const coinDelta = Number(params.coins ?? 0);
+  const battleStake = sanitizeBattleStake(params.stake ?? DEFAULT_BATTLE_STAKE);
   const isBattle  = params.isBattle === '1';
-  const isTie     = s1 === s2;
+  const isTie     = isBattle ? coinDelta === 0 : s1 === s2;
   const iWon      = isBattle ? winner === p1 : false; // in battle, p1 is always "me"
 
   const trophy  = useRef(new Animated.Value(0)).current;
@@ -90,7 +93,10 @@ export default function Winner() {
     playGameSound(iWon || isTie || !isBattle ? 'win' : 'tap', state.settings.sound);
 
     // Reward/deduct coins on mount
-    if (coinDelta !== 0) addCoins(coinDelta);
+    if (coinDelta !== 0) {
+      addCoins(coinDelta);
+      if (isBattle) applyOnlineCoinDelta(coinDelta).catch(() => {});
+    }
 
     // Trophy / defeat icon bounce-in
     Animated.spring(trophy, {
@@ -232,6 +238,14 @@ export default function Winner() {
     playGameSound('tap', state.settings.sound);
 
     if (!incomingRematch || navigatingRef.current) return;
+    const roomStake = incomingRematch.stakeCoins ?? battleStake;
+    if (state.coins < roomStake) {
+      Alert.alert(
+        'Not enough coins',
+        `This rematch needs ${roomStake} coins. Your balance is ${state.coins}.`,
+      );
+      return;
+    }
 
     setAcceptRematchBusy(true);
     setRematchStatus('Joining rematch...');
@@ -249,6 +263,14 @@ export default function Winner() {
 
   const handleRematchDifficultySelect = async (difficulty: string) => {
     if (!params.opponentId || navigatingRef.current) return;
+    if (state.coins < battleStake) {
+      Alert.alert(
+        'Not enough coins',
+        `This rematch needs ${battleStake} coins. Your balance is ${state.coins}.`,
+      );
+      setShowDiffPicker(false);
+      return;
+    }
 
     const opponent: PublicUser = {
       uid: params.opponentId,
@@ -283,7 +305,7 @@ export default function Winner() {
 
       // 2) Normal first-time-battle behavior: create a pending room.
       const levelData = getRandomBattleLevel(difficulty);
-      const createdRoom = await createBattleRoom({ friend: opponent, ...levelData });
+      const createdRoom = await createBattleRoom({ friend: opponent, ...levelData, stakeCoins: battleStake });
 
       setShowDiffPicker(false);
       setRematchStatus('Rematch request sent...');

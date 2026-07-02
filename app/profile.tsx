@@ -24,6 +24,7 @@ import { useAppState } from '../lib/storage';
 import { playTapSound } from '../lib/audio';
 import { PlayerAvatar, FRAME_CONFIGS } from '../components/PlayerAvatar';
 import { pickAndUploadAvatar } from '../lib/uploadPhoto';
+import { goBackOrHome } from '../lib/navigation';
 
 type AvatarId =
   | 'game-controller' | 'person' | 'star' | 'rocket' | 'flame'
@@ -159,12 +160,12 @@ export default function Profile() {
 
   return (
     <View style={styles.bg}>
-      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={require('../assets/images/wordrush-arena-background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
-          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.back(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); goBackOrHome(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: C.ink }]}>My Profile</Text>
@@ -442,3 +443,4 @@ const styles = StyleSheet.create({
   frameCardName: { fontSize: 11, fontWeight: '900', textAlign: 'center' },
   frameCardSub: { fontSize: 9, fontWeight: '700', textAlign: 'center', letterSpacing: 0.3 },
 });
+

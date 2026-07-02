@@ -16,6 +16,7 @@ import {
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { ScreenShell } from '../components/ScreenShell';
 import { useAppTheme } from '../lib/appTheme';
+import { BATTLE_STAKE_OPTIONS, DEFAULT_BATTLE_STAKE } from '../lib/battleEconomy';
 import {
   acceptXoxRoom,
   createXoxRoom,
@@ -28,11 +29,11 @@ import {
   subscribeToMyXoxList,
   XoxRoom,
 } from '../lib/online';
+import { goBackOrHome } from '../lib/navigation';
+import { useAppState } from '../lib/storage';
 
-const BOARD_SIZES: { size: 3 | 4 | 5; label: string; sub: string; color: string }[] = [
+const BOARD_SIZES: { size: 3; label: string; sub: string; color: string }[] = [
   { size: 3, label: '3 × 3', sub: 'Classic',  color: '#4CC38A' },
-  { size: 4, label: '4 × 4', sub: 'Extended', color: '#FF7A00' },
-  { size: 5, label: '5 × 5', sub: 'Big',      color: '#8E6BFF' },
 ];
 
 type RoomBuckets = {
@@ -49,10 +50,12 @@ function initials(name: string) {
 }
 
 export default function XoxBattleScreen() {
+  const { state } = useAppState();
   const [uid,           setUid]           = useState<string | null>(null);
   const [friends,       setFriends]       = useState<PublicUser[]>([]);
   const [rooms,         setRooms]         = useState<RoomBuckets>(emptyBuckets);
-  const [boardSize,     setBoardSize]     = useState<3 | 4 | 5>(3);
+  const [boardSize,     setBoardSize]     = useState<3>(3);
+  const [stakeCoins,    setStakeCoins]    = useState(DEFAULT_BATTLE_STAKE);
   const [loading,       setLoading]       = useState(true);
   const [busyId,        setBusyId]        = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -86,7 +89,7 @@ export default function XoxBattleScreen() {
               'Sign in required',
               'Create an account or sign in to play online XOX. Guest mode is offline only.',
               [
-                { text: 'Not now', style: 'cancel', onPress: () => router.back() },
+                { text: 'Not now', style: 'cancel', onPress: goBackOrHome },
                 { text: 'Sign in', onPress: () => router.replace('/login') },
               ],
             );
@@ -110,9 +113,17 @@ export default function XoxBattleScreen() {
   };
 
   const challenge = async (friend: PublicUser) => {
+    if (state.coins < stakeCoins) {
+      Alert.alert(
+        'Not enough coins',
+        `You need ${stakeCoins} coins to start this XOX battle. Your balance is ${state.coins}.`,
+      );
+      return;
+    }
+
     try {
       setBusyId(friend.uid);
-      const room = await createXoxRoom({ friend, boardSize });
+      const room = await createXoxRoom({ friend, boardSize, stakeCoins });
       openRoom(room);
     } catch (e: any) {
       Alert.alert('Challenge error', e?.message || 'Could not send challenge.');
@@ -122,6 +133,15 @@ export default function XoxBattleScreen() {
   };
 
   const accept = async (room: XoxRoom) => {
+    const roomStake = room.stakeCoins ?? DEFAULT_BATTLE_STAKE;
+    if (state.coins < roomStake) {
+      Alert.alert(
+        'Not enough coins',
+        `This XOX battle needs ${roomStake} coins. Your balance is ${state.coins}.`,
+      );
+      return;
+    }
+
     try {
       setBusyId(room.id);
       const accepted = await acceptXoxRoom(room);
@@ -159,7 +179,7 @@ export default function XoxBattleScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.heroTitle, { color: C.ink }]}>Pick board size</Text>
             <Text style={[styles.heroSub, { color: C.muted }]}>
-              Choose size, then tap a friend to challenge them
+              Choose coins, then tap a friend to challenge them
             </Text>
           </View>
         </View>
@@ -182,6 +202,45 @@ export default function XoxBattleScreen() {
           ))}
         </View>
 
+        <View style={[styles.stakePanel, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <View style={styles.stakeHeader}>
+            <View>
+              <Text style={[styles.stakeTitle, { color: C.ink }]}>XOX Coins</Text>
+              <Text style={[styles.stakeSub, { color: C.muted }]}>
+                Your balance: {state.coins.toLocaleString()} coins
+              </Text>
+            </View>
+            <View style={styles.stakeBadge}>
+              <Ionicons name="logo-bitcoin" size={14} color="#1A0845" />
+              <Text style={styles.stakeBadgeText}>{stakeCoins}</Text>
+            </View>
+          </View>
+
+          <View style={styles.stakeOptions}>
+            {BATTLE_STAKE_OPTIONS.map((amount) => {
+              const selected = amount === stakeCoins;
+              const affordable = state.coins >= amount;
+              return (
+                <AnimatedPressable
+                  key={amount}
+                  disabled={!affordable}
+                  onPress={() => setStakeCoins(amount)}
+                  style={[
+                    styles.stakeOption,
+                    { borderColor: C.divider },
+                    selected && styles.stakeOptionActive,
+                    !affordable && styles.stakeOptionDisabled,
+                  ]}
+                >
+                  <Text style={[styles.stakeOptionText, selected && styles.stakeOptionTextActive]}>
+                    {amount}
+                  </Text>
+                </AnimatedPressable>
+              );
+            })}
+          </View>
+        </View>
+
         {loading && (
           <ActivityIndicator color={C.ink} size="large" style={{ marginVertical: 30 }} />
         )}
@@ -198,11 +257,11 @@ export default function XoxBattleScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.cardTitle, { color: C.ink }]}>{friend.displayName}</Text>
-              <Text style={[styles.cardMeta, { color: C.muted }]}>{boardSize}×{boardSize} • XOX Online</Text>
+              <Text style={[styles.cardMeta, { color: C.muted }]}>{boardSize}x{boardSize} - Stake {stakeCoins} coins</Text>
             </View>
             <AnimatedPressable
-              disabled={busyId === friend.uid}
-              style={styles.challengeBtn}
+              disabled={busyId === friend.uid || state.coins < stakeCoins}
+              style={[styles.challengeBtn, state.coins < stakeCoins && styles.challengeBtnDisabled]}
               onPress={() => challenge(friend)}
             >
               {busyId === friend.uid ? (
@@ -210,7 +269,7 @@ export default function XoxBattleScreen() {
               ) : (
                 <>
                   <Ionicons name="grid-outline" size={14} color="#fff" />
-                  <Text style={styles.challengeText}>Challenge</Text>
+                  <Text style={styles.challengeText}>{state.coins < stakeCoins ? 'Need Coins' : 'Challenge'}</Text>
                 </>
               )}
             </AnimatedPressable>
@@ -314,6 +373,10 @@ function XoxRoomCard({
         <View style={{ flex: 1 }}>
           <Text style={[styles.cardTitle, { color: C.ink }]}>{opponent}</Text>
           <Text style={[styles.cardMeta, { color: C.muted }]}>{room.boardSize}×{room.boardSize} Board</Text>
+          <View style={styles.roomStakePill}>
+            <Ionicons name="logo-bitcoin" size={11} color="#FFD23F" />
+            <Text style={styles.roomStakeText}>{room.stakeCoins ?? DEFAULT_BATTLE_STAKE} coin battle</Text>
+          </View>
           <Text style={[styles.statusText, { color: resultColor }]}>{resultText}</Text>
         </View>
         {busy && <ActivityIndicator color={C.ink} size="small" />}
@@ -369,6 +432,51 @@ const styles = StyleSheet.create({
   sizeLabel: { color: '#fff', fontWeight: '900', fontSize: 16 },
   sizeSub:   { color: 'rgba(255,255,255,0.70)', fontWeight: '700', fontSize: 11 },
 
+  stakePanel: {
+    borderRadius: 24,
+    padding: 14,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    gap: 12,
+  },
+  stakeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  stakeTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
+  stakeSub: {
+    color: 'rgba(255,255,255,0.68)',
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stakeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFD23F',
+  },
+  stakeBadgeText: { color: '#1A0845', fontSize: 13, fontWeight: '900' },
+  stakeOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  stakeOption: {
+    minWidth: 58,
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  stakeOptionActive: { backgroundColor: '#FFD23F', borderColor: '#FFD23F' },
+  stakeOptionDisabled: { opacity: 0.36 },
+  stakeOptionText: { color: '#fff', fontWeight: '900', fontSize: 12 },
+  stakeOptionTextActive: { color: '#1A0845' },
+
   section: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   sectionTitle: { color: '#fff', fontWeight: '900', fontSize: 17 },
   badge: {
@@ -420,6 +528,20 @@ const styles = StyleSheet.create({
   avatarText: { color: '#fff', fontWeight: '900', fontSize: 18 },
   cardTitle:  { color: '#fff', fontWeight: '900', fontSize: 16 },
   cardMeta:   { color: 'rgba(255,255,255,0.64)', fontWeight: '700', fontSize: 12, marginTop: 2 },
+  roomStakePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,210,63,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,210,63,0.26)',
+    marginTop: 6,
+  },
+  roomStakeText: { color: '#FFD23F', fontSize: 10, fontWeight: '900' },
   statusText: { fontWeight: '900', fontSize: 10, marginTop: 5 },
 
   challengeBtn: {
@@ -433,6 +555,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
     justifyContent: 'center',
   },
+  challengeBtnDisabled: { opacity: 0.55 },
   challengeText: { color: '#fff', fontWeight: '900', fontSize: 13 },
 
   rowActions: { flexDirection: 'row', gap: 8 },
@@ -463,3 +586,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+

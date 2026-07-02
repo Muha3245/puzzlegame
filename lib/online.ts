@@ -2,6 +2,7 @@
 // Supabase helpers for auth, profiles, friends, leaderboard, progress, and live battle rooms.
 
 import { supabase } from "./supabase";
+import { DEFAULT_BATTLE_STAKE, sanitizeBattleStake } from "./battleEconomy";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 
@@ -70,6 +71,7 @@ export type BattleRoom = {
   categoryTitle: string;
   difficulty: string;
   level: number;
+  stakeCoins: number;
   winnerId?: string | null;
   createdAt?: any;
   updatedAt?: any;
@@ -121,6 +123,7 @@ function mapBattleRoom(row: any): BattleRoom {
     categoryTitle: row.category_title,
     difficulty: row.difficulty,
     level: row.level,
+    stakeCoins: sanitizeBattleStake(row.stake_coins ?? DEFAULT_BATTLE_STAKE),
     winnerId: row.winner_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -405,6 +408,32 @@ export async function completeOnlineLevel({
   }
 }
 
+export async function applyOnlineCoinDelta(delta: number) {
+  if (!Number.isFinite(delta) || delta === 0) return;
+
+  const uid = await getCurrentUserId();
+  if (!uid) return;
+
+  const { data: profile, error: fetchError } = await supabase
+    .from("users")
+    .select("coins")
+    .eq("uid", uid)
+    .maybeSingle();
+
+  if (fetchError) throw fetchError;
+  if (!profile) return;
+
+  const { error } = await supabase
+    .from("users")
+    .update({
+      coins: Math.max(0, (profile.coins ?? 0) + delta),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("uid", uid);
+
+  if (error) throw error;
+}
+
 // ─── Leaderboard ──────────────────────────────────────────────────────────────
 
 export async function getGlobalLeaderboard(count = 50) {
@@ -515,6 +544,66 @@ export async function getIncomingFriendRequests(): Promise<FriendRequest[]> {
   }));
 }
 
+function mapFriendRequest(row: any): FriendRequest {
+  return {
+    id: row.id,
+    fromUid: row.from_uid,
+    toUid: row.to_uid,
+    fromName: row.from_name,
+    toName: row.to_name,
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
+export function subscribeToIncomingFriendRequests(
+  userId: string,
+  onNewRequest: (request: FriendRequest) => void,
+) {
+  const channel = supabase
+    .channel(`friend-incoming-${userId}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "friend_requests" },
+      (payload: any) => {
+        if (
+          payload.new?.to_uid === userId &&
+          payload.new?.status === "pending"
+        ) {
+          onNewRequest(mapFriendRequest(payload.new));
+        }
+      },
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToFriendRequestChanges(
+  userId: string,
+  onChange: () => void,
+) {
+  const channel = supabase
+    .channel(`friend-request-count-${userId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "friend_requests",
+        filter: `to_uid=eq.${userId}`,
+      },
+      () => onChange(),
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export async function acceptFriendRequest(request: FriendRequest) {
   const now = new Date().toISOString();
 
@@ -609,6 +698,7 @@ export async function createBattleRoom({
   categoryTitle,
   difficulty,
   level,
+  stakeCoins = DEFAULT_BATTLE_STAKE,
 }: {
   friend: PublicUser;
   categoryId: string;
@@ -616,6 +706,7 @@ export async function createBattleRoom({
   categoryTitle: string;
   difficulty: string;
   level: number;
+  stakeCoins?: number;
 }) {
   const me = await getMyProfile();
   if (!me) throw new Error("Please login first.");
@@ -636,16 +727,28 @@ export async function createBattleRoom({
       ? safeDifficulty
       : "easy",
     level: Math.min(Math.max(Number(level || 1) || 1, 1), 8),
+    stake_coins: sanitizeBattleStake(stakeCoins),
     updated_at: new Date().toISOString(),
   };
 
   logOnline("createBattleRoom insert", payload);
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("battle_rooms")
     .insert(payload)
     .select("*")
     .single();
+
+  if (error && String(error.message ?? "").toLowerCase().includes("stake_coins")) {
+    const { stake_coins: _stakeCoins, ...fallbackPayload } = payload;
+    const retry = await supabase
+      .from("battle_rooms")
+      .insert(fallbackPayload)
+      .select("*")
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     logOnline("createBattleRoom error", error);
@@ -1133,6 +1236,7 @@ export type XoxRoom = {
   currentTurn: 'X' | 'O';
   winner: 'X' | 'O' | 'draw' | null;
   winnerId: string | null;
+  stakeCoins: number;
   createdAt?: any;
   updatedAt?: any;
 };
@@ -1156,6 +1260,7 @@ function mapXoxRoom(row: any): XoxRoom {
     currentTurn: (row.current_turn as 'X' | 'O') || 'X',
     winner: row.winner || null,
     winnerId: row.winner_id || null,
+    stakeCoins: sanitizeBattleStake(row.stake_coins ?? DEFAULT_BATTLE_STAKE),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1165,15 +1270,16 @@ function mapXoxRoom(row: any): XoxRoom {
 
 export async function createXoxRoom({
   friend,
-  boardSize,
+  stakeCoins = DEFAULT_BATTLE_STAKE,
 }: {
   friend: PublicUser;
-  boardSize: number;
+  boardSize?: number;
+  stakeCoins?: number;
 }): Promise<XoxRoom> {
   const me = await getMyProfile();
   if (!me) throw new Error('Please login first.');
 
-  const n = boardSize || 3;
+  const n = 3;
   const payload = {
     player1_id: me.uid,
     player2_id: friend.uid,
@@ -1185,14 +1291,26 @@ export async function createXoxRoom({
     current_turn: 'X',
     winner: null,
     winner_id: null,
+    stake_coins: sanitizeBattleStake(stakeCoins),
     updated_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('xox_rooms')
     .insert(payload)
     .select('*')
     .single();
+
+  if (error && String(error.message ?? '').toLowerCase().includes('stake_coins')) {
+    const { stake_coins: _stakeCoins, ...fallbackPayload } = payload;
+    const retry = await supabase
+      .from('xox_rooms')
+      .insert(fallbackPayload)
+      .select('*')
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) throw error;
   return mapXoxRoom(data);

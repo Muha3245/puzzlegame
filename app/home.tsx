@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -13,14 +14,13 @@ import {
 import { Image as ExpoImage } from 'expo-image';
 import Svg, {
   Circle, Defs, Ellipse,
-  FeColorMatrix, Filter,
-  Image as SvgImage,
   Path, Polygon,
-  RadialGradient, Rect, Stop,
+  RadialGradient, Rect, Stop, Text as SvgText,
 } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { AnimatedEntry } from '../components/AnimatedEntry';
+import { getCurrentUserId, getIncomingFriendRequests, subscribeToFriendRequestChanges } from '../lib/online';
 import { useAppState } from '../lib/storage';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -340,7 +340,7 @@ function Background() {
 
       {/* ── Background image ── */}
       <ExpoImage
-        source={require('../assets/images/background.png')}
+        source={require('../assets/images/wordrush-arena-background.png')}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
       />
@@ -399,35 +399,23 @@ function GameLogo() {
 
   return (
     <Animated.View style={[styles.logoWrap, { transform: [{ scale: sc }], opacity: op }]}>
-      {/* Glow ring behind logo */}
       <View style={styles.logoGlow} />
-
-      <View style={styles.logoBox}>
-        {/* Top "PUZZLE" text */}
-        <View style={styles.logoRow}>
-          {['P','U','Z','Z','L','E'].map((ch, i) => (
+      <View style={styles.wordRushMark}>
+        <View style={styles.wordRushTileRow}>
+          {['W', 'O', 'R', 'D'].map((ch, i) => (
             <View
-              key={i}
+              key={`${ch}-${i}`}
               style={[
-                styles.logoLetter,
-                {
-                  backgroundColor: [C.pink, C.purple, C.blue, C.yellow, C.orange, C.green][i],
-                  transform: [{ rotate: i % 2 === 0 ? '-3deg' : '3deg' }],
-                },
+                styles.wordRushTile,
+                { backgroundColor: [C.blue, C.green, C.yellow, C.pink][i] },
               ]}
             >
-              <Text style={styles.logoLetterText}>{ch}</Text>
-              <View style={styles.logoLetterShine} />
+              <Text style={styles.wordRushTileText}>{ch}</Text>
             </View>
           ))}
         </View>
-
-        {/* "ARENA" subtitle */}
-        <View style={styles.arenaRow}>
-          <View style={[styles.arenaDash, { backgroundColor: C.yellow }]} />
-          <Text style={styles.arenaText}>ARENA</Text>
-          <View style={[styles.arenaDash, { backgroundColor: C.yellow }]} />
-        </View>
+        <Text style={styles.wordRushText}>RUSH</Text>
+        <Text style={styles.wordRushArena}>ARENA</Text>
       </View>
     </Animated.View>
   );
@@ -451,22 +439,50 @@ function Mascot() {
     <Animated.View style={[styles.mascotWrap, { transform: [{ translateY: bounce }] }]}>
       <Svg width={160} height={160}>
         <Defs>
-          <Filter id="removeWhiteBg" x="0%" y="0%" width="100%" height="100%">
-            <FeColorMatrix
-              type="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  -1 -1 -1 0 3"
-            />
-          </Filter>
+          <RadialGradient id="arenaGlow" cx="50%" cy="42%" r="62%">
+            <Stop offset="0%" stopColor="#29E0FF" stopOpacity="0.95" />
+            <Stop offset="52%" stopColor="#8E6BFF" stopOpacity="0.86" />
+            <Stop offset="100%" stopColor="#FF4D8D" stopOpacity="0.82" />
+          </RadialGradient>
+          <RadialGradient id="faceGlow" cx="44%" cy="34%" r="70%">
+            <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.35" />
+            <Stop offset="100%" stopColor="#07102C" stopOpacity="0.95" />
+          </RadialGradient>
         </Defs>
-        <SvgImage
-          href={require('../assets/images/moscot.png')}
-          x="0"
-          y="0"
-          width="160"
-          height="160"
-          preserveAspectRatio="xMidYMid meet"
-          filter="url(#removeWhiteBg)"
+        <Ellipse cx="80" cy="136" rx="48" ry="10" fill="rgba(41,224,255,0.20)" />
+        <Rect
+          x="34"
+          y="28"
+          width="92"
+          height="92"
+          rx="26"
+          fill="url(#arenaGlow)"
+          stroke="rgba(255,255,255,0.55)"
+          strokeWidth="3"
         />
+        <Rect x="45" y="40" width="70" height="68" rx="20" fill="url(#faceGlow)" />
+        <Circle cx="64" cy="68" r="8" fill="#29E0FF" />
+        <Circle cx="96" cy="68" r="8" fill="#FFD23F" />
+        <Path
+          d="M58 91 C69 103 91 103 102 91"
+          stroke="#FFFFFF"
+          strokeWidth="5"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <Path d="M80 18 L80 28" stroke="#FFD23F" strokeWidth="5" strokeLinecap="round" />
+        <Circle cx="80" cy="15" r="7" fill="#FFD23F" />
+        <Rect x="20" y="62" width="17" height="38" rx="8" fill="#29E0FF" opacity="0.86" />
+        <Rect x="123" y="62" width="17" height="38" rx="8" fill="#FF4D8D" opacity="0.86" />
+        <Polygon
+          points="80,50 91,76 81,76 74,100 70,78 61,78"
+          fill="#FFD23F"
+          stroke="rgba(255,255,255,0.72)"
+          strokeWidth="2"
+        />
+        <SvgText x="80" y="130" fill="#FFFFFF" fontSize="18" fontWeight="900" textAnchor="middle">
+          WR
+        </SvgText>
       </Svg>
     </Animated.View>
   );
@@ -614,6 +630,39 @@ function CoinsPill({ coins, onPress }: { coins: number; onPress: () => void }) {
 export default function Home() {
   const { state } = useAppState();
   const insets = useSafeAreaInsets();
+  const [friendRequestCount, setFriendRequestCount] = useState(0);
+
+  const refreshFriendRequestCount = useCallback(async () => {
+    try {
+      const requests = await getIncomingFriendRequests();
+      setFriendRequestCount(requests.length);
+    } catch {
+      setFriendRequestCount(0);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshFriendRequestCount();
+    }, [refreshFriendRequestCount])
+  );
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    let alive = true;
+
+    getCurrentUserId()
+      .then((uid) => {
+        if (!alive || !uid) return;
+        cleanup = subscribeToFriendRequestChanges(uid, refreshFriendRequestCount);
+      })
+      .catch(() => {});
+
+    return () => {
+      alive = false;
+      cleanup?.();
+    };
+  }, [refreshFriendRequestCount]);
 
 
   return (
@@ -636,7 +685,15 @@ export default function Home() {
             style={styles.topIconBtn}
           >
             <Ionicons name="notifications" size={20} color="#fff" />
-            <View style={styles.notifDot} />
+            {friendRequestCount > 0 ? (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>
+                  {friendRequestCount > 9 ? '9+' : friendRequestCount}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.notifDot} />
+            )}
           </AnimatedPressable>
 
           {/* Coins */}
@@ -740,6 +797,27 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: C.bg1,
   },
+  notifBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 3,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.pink,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  notifBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
   coinsPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -768,18 +846,65 @@ const styles = StyleSheet.create({
   // ── Logo ──────────────────────────────────────────────────────────────────────
   logoWrap: {
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: 2,
+    marginBottom: 0,
   },
   logoGlow: {
     position: 'absolute',
-    width: SW * 0.8,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: C.purple,
-    opacity: 0.2,
+    width: SW * 0.58,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#29E0FF',
+    opacity: 0.16,
     top: '50%',
-    marginTop: -10,
+    marginTop: -16,
+  },
+  wordRushMark: {
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  wordRushTileRow: {
+    flexDirection: 'row',
+    gap: 5,
+    marginBottom: -2,
+  },
+  wordRushTile: {
+    width: 31,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: 'rgba(0,0,0,0.28)',
+  },
+  wordRushTileText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+    textShadowColor: 'rgba(0,0,0,0.28)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  wordRushText: {
+    color: '#FFFFFF',
+    fontSize: 35,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 38,
+    textShadowColor: 'rgba(41,224,255,0.80)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
+  wordRushArena: {
+    color: C.yellow,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0,
+    marginTop: -2,
+    textShadowColor: 'rgba(255,210,63,0.70)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 7,
   },
   logoBox: { alignItems: 'center', gap: 4 },
   logoRow: { flexDirection: 'row', gap: 5, alignItems: 'flex-end' },
@@ -1070,3 +1195,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.32)',
   },
 });
+

@@ -2,19 +2,20 @@
 // SDK 54 safe splash screen. Duplicate React keys fixed by using letter + index.
 
 import React, { useEffect, useMemo, useRef } from 'react';
+import { Image } from 'expo-image';
 import { Animated, Easing, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 type Props = { onDone: () => void };
 
-const TILE_SIZE = 46;
-const TILE_GAP = 8;
 const TILES = [
-  { letter: 'P', bg: '#FF7A00' },
-  { letter: 'U', bg: '#FF6040' },
-  { letter: 'Z', bg: '#FFD23F' },
-  { letter: 'Z', bg: '#4CC38A' },
-  { letter: 'L', bg: '#7C5CFF' },
-  { letter: 'E', bg: '#FF4D8D' },
+  { letter: 'W', bg: '#29E0FF' },
+  { letter: 'O', bg: '#4CC38A' },
+  { letter: 'R', bg: '#FFD23F' },
+  { letter: 'D', bg: '#FF4D8D' },
+  { letter: 'R', bg: '#8E6BFF' },
+  { letter: 'U', bg: '#FF8C42' },
+  { letter: 'S', bg: '#29E0FF' },
+  { letter: 'H', bg: '#FF6BB3' },
 ];
 
 function LogoMark() {
@@ -51,23 +52,29 @@ function LogoMark() {
   }, [drops, opacities, pulse]);
 
   return (
-    <Animated.View style={[styles.logoGrid, { transform: [{ scale: pulse }] }]}>
-      {TILES.map((tile, i) => (
-        <Animated.View
-          // Do not use only tile.letter because Puzzle has two Z letters.
-          key={`${tile.letter}-${i}`}
-          style={[
-            styles.tile,
-            {
-              backgroundColor: tile.bg,
-              opacity: opacities[i],
-              transform: [{ translateY: drops[i] }],
-            },
-          ]}
-        >
-          <Text style={styles.tileText}>{tile.letter}</Text>
-        </Animated.View>
-      ))}
+    <Animated.View style={[styles.logoWrap, { transform: [{ scale: pulse }] }]}>
+      <Image
+        source={require('../assets/images/wordrush-arena-logo.png')}
+        style={styles.logoImage}
+        contentFit="contain"
+      />
+      <View pointerEvents="none" style={styles.tileOrbit}>
+        {TILES.map((tile, i) => (
+          <Animated.View
+            key={`${tile.letter}-${i}`}
+            style={[
+              styles.miniTile,
+              {
+                backgroundColor: tile.bg,
+                opacity: opacities[i],
+                transform: [{ translateY: drops[i] }],
+              },
+            ]}
+          >
+            <Text style={styles.miniTileText}>{tile.letter}</Text>
+          </Animated.View>
+        ))}
+      </View>
     </Animated.View>
   );
 }
@@ -107,6 +114,12 @@ export function Splash({ onDone }: Props) {
 
   return (
     <Animated.View style={[styles.root, { opacity: wholeOp }]}>
+      <Image
+        source={require('../assets/images/wordrush-arena-background.png')}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+      />
+      <View style={styles.bgOverlay} />
       {bubbles.map((b) => (
         <View
           key={b.key}
@@ -120,8 +133,8 @@ export function Splash({ onDone }: Props) {
       <View style={styles.center}>
         <LogoMark />
         <Animated.View style={{ opacity: titleOp, transform: [{ translateY: titleY }] }}>
-          <Text style={styles.title}>Puzzle Arena</Text>
-          <Text style={styles.subtitle}>Word Search • XOX • Battle</Text>
+          <Text style={styles.title}>WordRush Arena</Text>
+          <Text style={styles.subtitle}>Word Search | XOX | Online Battles</Text>
         </Animated.View>
         <View style={styles.progressTrack}>
           <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
@@ -134,8 +147,12 @@ export function Splash({ onDone }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#13233F',
+    backgroundColor: '#05091C',
     overflow: 'hidden',
+  },
+  bgOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(5,9,28,0.36)',
   },
   center: {
     flex: 1,
@@ -147,18 +164,31 @@ const styles = StyleSheet.create({
     position: 'absolute',
     backgroundColor: '#FFFFFF',
   },
-  logoGrid: {
-    width: TILE_SIZE * 3 + TILE_GAP * 2,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: TILE_GAP,
+  logoWrap: {
+    width: 220,
+    height: 220,
+    alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
   },
-  tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
-    borderRadius: 15,
+  logoImage: {
+    width: 210,
+    height: 210,
+  },
+  tileOrbit: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  miniTile: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -167,17 +197,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-  tileText: {
+  miniTileText: {
     color: '#FFFFFF',
-    fontSize: 24,
+    fontSize: 14,
     fontWeight: '900',
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 34,
+    fontSize: 32,
     fontWeight: '900',
     textAlign: 'center',
-    letterSpacing: 0.4,
+    letterSpacing: 0,
   },
   subtitle: {
     color: 'rgba(255,255,255,0.72)',
@@ -200,3 +230,4 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD23F',
   },
 });
+

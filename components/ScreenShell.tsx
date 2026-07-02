@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import { router } from 'expo-router';
 import React, { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedPressable } from './AnimatedPressable';
+import { WordRushBackdrop } from './WordRushBackdrop';
+import { goBackOrHome } from '../lib/navigation';
 
 export function ScreenShell({
   title,
@@ -19,17 +19,13 @@ export function ScreenShell({
 }) {
   return (
     <View style={styles.root}>
-      <Image
-        source={require('../assets/images/background.png')}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-      />
+      <WordRushBackdrop />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           {showBack ? (
             <AnimatedPressable
               style={styles.btn}
-              onPress={() => (router.canGoBack() ? router.back() : router.replace('/home' as any))}
+              onPress={goBackOrHome}
             >
               <Ionicons name="chevron-back" size={23} color="#fff" />
             </AnimatedPressable>
@@ -49,7 +45,7 @@ export function ScreenShell({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#2A0A80' },
+  root: { flex: 1, backgroundColor: '#05091C' },
   safe: { flex: 1 },
   header: {
     flexDirection: 'row',

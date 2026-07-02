@@ -1,7 +1,7 @@
-import { Image } from 'expo-image';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WordRushBackdrop } from '../WordRushBackdrop';
 
 interface ScreenLayoutProps {
   children: React.ReactNode;
@@ -14,11 +14,7 @@ export function ScreenLayout({
 }: ScreenLayoutProps) {
   return (
     <View style={styles.bg}>
-      <Image
-        source={require('../../assets/images/background.png')}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-      />
+      <WordRushBackdrop />
       <View style={styles.overlay} />
       <View style={styles.orb1} />
       <View style={styles.orb2} />

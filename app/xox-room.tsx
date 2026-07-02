@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import {
   BattleChatMessage,
+  applyOnlineCoinDelta,
   createXoxRoom,
   getCurrentUserId,
   getXoxRoom,
@@ -38,10 +39,10 @@ import {
 } from '../lib/online';
 import { playDrawSound, playLoseSound, playXoxMove, playBattleWin, playBgMusic, stopBgMusic, playTapSound } from '../lib/audio';
 import { useAppState } from '../lib/storage';
+import { goBackOrHome } from '../lib/navigation';
+import { DEFAULT_BATTLE_STAKE, sanitizeBattleStake } from '../lib/battleEconomy';
 
 type Mark = 'X' | 'O' | null;
-
-const EXIT_COIN_PENALTY = 15;
 
 // ── Game-logic utilities ──────────────────────────────────────────────────────
 
@@ -176,6 +177,7 @@ export default function XoxRoomScreen() {
   );
 
   const boardSizePx = Math.min(width - 36, 370);
+  const stakeCoins = sanitizeBattleStake(room?.stakeCoins ?? DEFAULT_BATTLE_STAKE);
 
   // ── Sync helper ────────────────────────────────────────────────────────────
 
@@ -192,6 +194,11 @@ export default function XoxRoomScreen() {
   };
 
   // ── Initial load ───────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    soundPlayedRef.current = false;
+    coinAppliedRef.current = false;
+  }, [roomId]);
 
   useEffect(() => {
     let mounted = true;
@@ -291,16 +298,14 @@ export default function XoxRoomScreen() {
     }
 
     // Coins: award the winner / deduct the loser exactly once when the online
-    // game ends (draw → no change). Mirrors the word-search battle economy.
-    // Bigger boards pay/cost a little more. The quit path is handled separately
-    // in handleQuit (fixed EXIT_COIN_PENALTY), so skip it here.
+    // game ends (draw -> no change). Keep local and Supabase balances aligned.
     if (room?.boardSize && winner !== 'draw' && !coinAppliedRef.current) {
       coinAppliedRef.current = true;
-      const bonus = (room.boardSize - 3) * 10; // 3×3:0  4×4:10  5×5:20
-      if (winner === myMark) addCoins(40 + bonus);
-      else addCoins(-(20 + Math.floor(bonus / 2)));
+      const coinDelta = winner === myMark ? stakeCoins : -stakeCoins;
+      addCoins(coinDelta);
+      applyOnlineCoinDelta(coinDelta).catch(() => {});
     }
-  }, [winner, myMark]);
+  }, [winner, myMark, stakeCoins]);
 
   // ── Move handler ───────────────────────────────────────────────────────────
 
@@ -378,7 +383,7 @@ export default function XoxRoomScreen() {
     Alert.alert(
       'Quit Game',
       isActive
-        ? `Leave this game? Your opponent wins and you lose ${EXIT_COIN_PENALTY} coins.`
+        ? `Leave this game? Your opponent wins and you lose ${stakeCoins} coins.`
         : 'Leave this game?',
       [
         { text: 'Stay', style: 'cancel' },
@@ -387,7 +392,9 @@ export default function XoxRoomScreen() {
           style: 'destructive',
           onPress: async () => {
             if (isActive && room && myMark) {
-              addCoins(-EXIT_COIN_PENALTY);
+              coinAppliedRef.current = true;
+              addCoins(-stakeCoins);
+              applyOnlineCoinDelta(-stakeCoins).catch(() => {});
               const winnerMark: 'X' | 'O' = myMark === 'X' ? 'O' : 'X';
               const winnerId = myMark === 'X' ? room.player2Id : room.player1Id;
               await makeXoxMove({
@@ -398,7 +405,7 @@ export default function XoxRoomScreen() {
                 winnerId,
               }).catch(() => {});
             }
-            router.back();
+            goBackOrHome();
           },
         },
       ],
@@ -409,6 +416,14 @@ export default function XoxRoomScreen() {
 
   const handleRematch = async () => {
     if (!room || !myMark) return;
+    if (state.coins < stakeCoins) {
+      Alert.alert(
+        'Not enough coins',
+        `This rematch needs ${stakeCoins} coins. Your balance is ${state.coins}.`,
+      );
+      return;
+    }
+
     const friend: PublicUser = {
       uid:             myMark === 'X' ? room.player2Id   : room.player1Id,
       displayName:     myMark === 'X' ? room.player2Name : room.player1Name,
@@ -419,7 +434,7 @@ export default function XoxRoomScreen() {
       battlesLost: 0,
     };
     try {
-      const newRoom = await createXoxRoom({ friend, boardSize: room.boardSize });
+      const newRoom = await createXoxRoom({ friend, boardSize: room.boardSize, stakeCoins });
       router.replace(`/xox-room?roomId=${newRoom.id}`);
     } catch (e: any) {
       Alert.alert('Rematch failed', e?.message || 'Could not create rematch.');
@@ -441,7 +456,7 @@ export default function XoxRoomScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <Text style={styles.errorText}>Game room not found.</Text>
-          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.back(); }} style={styles.fallbackBtn}>
+          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); goBackOrHome(); }} style={styles.fallbackBtn}>
             <Text style={styles.fallbackBtnText}>Go Back</Text>
           </Pressable>
         </View>
@@ -455,7 +470,7 @@ export default function XoxRoomScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.back(); }} style={styles.backBtn}>
+          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); goBackOrHome(); }} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </Pressable>
           <Text style={styles.headerTitle}>XOX Online</Text>
@@ -492,7 +507,7 @@ export default function XoxRoomScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={require('../assets/images/wordrush-arena-background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); handleQuit(); }} style={styles.backBtn}>
@@ -601,8 +616,8 @@ export default function XoxRoomScreen() {
               {winner === 'draw'
                 ? "It's a tie — well played!"
                 : winner === myMark
-                ? 'Excellent play!'
-                : `${opponentName} wins this round`}
+                ? `Excellent play! +${stakeCoins} coins`
+                : `${opponentName} wins this round. -${stakeCoins} coins`}
             </Text>
 
             <View style={styles.overlayBtnRow}>
@@ -613,6 +628,10 @@ export default function XoxRoomScreen() {
               <Pressable onPress={handlePlayAgain} style={[styles.overlayBtn, styles.lobbyBtn]}>
                 <Ionicons name="people" size={17} color="#0B1020" />
                 <Text style={[styles.overlayBtnText, { color: '#0B1020' }]}>Lobby</Text>
+              </Pressable>
+              <Pressable onPress={() => router.replace('/home')} style={[styles.overlayBtn, styles.homeBtn]}>
+                <Ionicons name="home" size={17} color="#fff" />
+                <Text style={styles.overlayBtnText}>Home</Text>
               </Pressable>
             </View>
           </View>
@@ -956,7 +975,7 @@ const styles = StyleSheet.create({
   },
   overlayTitle: { fontWeight: '900', fontSize: 36, letterSpacing: -0.5 },
   overlaySub:   { color: 'rgba(255,255,255,0.56)', fontWeight: '700', fontSize: 14, marginBottom: 6 },
-  overlayBtnRow: { flexDirection: 'row', gap: 10, width: '100%' },
+  overlayBtnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%' },
   overlayBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -968,6 +987,7 @@ const styles = StyleSheet.create({
   },
   rematchBtn: { backgroundColor: '#FF7A00' },
   lobbyBtn:   { backgroundColor: '#fff' },
+  homeBtn:    { backgroundColor: '#8E6BFF' },
   overlayBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
 
   // Chat modal
@@ -1121,3 +1141,4 @@ const styles = StyleSheet.create({
   },
   chatSendBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.15)' },
 });
+

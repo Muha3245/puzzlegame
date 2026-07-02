@@ -37,8 +37,6 @@ const MODES = [
 
 const BOARD_SIZES: { size: BoardSize; label: string }[] = [
   { size: 3, label: '3×3' },
-  { size: 4, label: '4×4' },
-  { size: 5, label: '5×5' },
 ];
 
 const ICON_X: Record<BoardSize, number> = { 3: 54, 4: 38, 5: 28 };

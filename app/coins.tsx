@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   Platform,
@@ -15,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../lib/appTheme';
 import { useAppState } from '../lib/storage';
 import { playTapSound } from '../lib/audio';
+import { goBackOrHome } from '../lib/navigation';
 
 const ORANGE = '#D94F2B';
 const GREEN = '#4CC38A';
@@ -63,7 +63,7 @@ export default function Coins() {
 
   return (
     <View style={styles.safe}>
-      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={require('../assets/images/wordrush-arena-background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <ScrollView
@@ -79,7 +79,7 @@ export default function Coins() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); router.back(); }} style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Pressable onPress={() => { playTapSound(state.settings.sound).catch(() => {}); goBackOrHome(); }} style={[styles.iconBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={22} color={C.ink} />
           </Pressable>
 
@@ -511,3 +511,4 @@ const styles = StyleSheet.create({
 
   buyBtnText: { fontSize: 15, fontWeight: '900', color: '#fff' },
 });
+

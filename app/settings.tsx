@@ -17,6 +17,7 @@ import { Theme } from '../constants/theme';
 import { useAppTheme } from '../lib/appTheme';
 import { useAppState } from '../lib/storage';
 import { playTapSound } from '../lib/audio';
+import { goBackOrHome } from '../lib/navigation';
 
 export default function Settings() {
   const { C } = useAppTheme();
@@ -25,11 +26,11 @@ export default function Settings() {
 
   return (
     <View style={styles.bg}>
-      <Image source={require('../assets/images/background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <Image source={require('../assets/images/wordrush-arena-background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={[styles.header, { borderBottomColor: C.divider }]}>
-          <Pressable onPress={() => { playTapSound(s.sound).catch(() => {}); router.back(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <Pressable onPress={() => { playTapSound(s.sound).catch(() => {}); goBackOrHome(); }} style={[styles.backBtn, { backgroundColor: C.surface, borderColor: C.divider }]}>
             <Ionicons name="chevron-back" size={24} color={C.ink} />
           </Pressable>
           <HighlightText size="large">Settings</HighlightText>
@@ -100,7 +101,7 @@ export default function Settings() {
               iconColor="#5B9BFF"
               label="Privacy & Terms"
               right={<Chev />}
-              onPress={() => Alert.alert('Privacy & Terms', 'By using WordPuzzle you agree to our privacy policy and terms of service.')}
+              onPress={() => Alert.alert('Privacy & Terms', 'By using WordRush Arena you agree to our privacy policy and terms of service.')}
             />
           </View>
 
@@ -231,3 +232,4 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
 });
+

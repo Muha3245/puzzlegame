@@ -12,8 +12,8 @@ const TABS = [
   { label: 'Settings', icon: 'settings-outline',        route: '/settings'    },
 ] as const;
 
-const PINK = '#FF6BB3';
-const GRAY = '#9890A8';
+const ACTIVE = '#29E0FF';
+const INACTIVE = 'rgba(255,255,255,0.62)';
 
 function BottomTabBar() {
   const pathname = usePathname();
@@ -23,7 +23,7 @@ function BottomTabBar() {
     <View style={[styles.wrapper, { bottom: Math.max(insets.bottom + 0, 0) }]}>
       {TABS.map((tab) => {
         const active = pathname === tab.route || pathname.startsWith(`${tab.route}/`);
-        const color  = active ? PINK : GRAY;
+        const color  = active ? ACTIVE : INACTIVE;
 
         return (
           <View key={tab.route} style={styles.tabItem}>
@@ -58,14 +58,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(5,9,28,0.46)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
     borderRadius: 36,
     paddingVertical: 14,
     paddingHorizontal: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 20,
+    shadowColor: '#29E0FF',
+    shadowOpacity: 0.24,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 22,
     elevation: 16,
   },
 
@@ -90,7 +93,9 @@ const styles = StyleSheet.create({
   },
 
   iconWrapActive: {
-    backgroundColor: 'rgba(255,107,179,0.12)',
+    backgroundColor: 'rgba(41,224,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(41,224,255,0.38)',
     borderRadius: 999,
   },
 

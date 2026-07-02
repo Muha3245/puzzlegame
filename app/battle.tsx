@@ -24,7 +24,9 @@ import {
   subscribeToMyBattleList,
 } from '../lib/online';
 import { playBattleRequestSound, playBattleStart } from '../lib/audio';
+import { BATTLE_STAKE_OPTIONS, DEFAULT_BATTLE_STAKE } from '../lib/battleEconomy';
 import { useAppState } from '../lib/storage';
+import { goBackOrHome } from '../lib/navigation';
 
 type DifficultyId = 'easy' | 'medium' | 'hard' | 'pro';
 
@@ -85,6 +87,7 @@ export default function BattleArena() {
   const [friends, setFriends] = useState<PublicUser[]>([]);
   const [rooms, setRooms] = useState<RoomBucket>(emptyBuckets);
   const [difficulty, setDifficulty] = useState<DifficultyId>('easy');
+  const [stakeCoins, setStakeCoins] = useState(DEFAULT_BATTLE_STAKE);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -139,7 +142,7 @@ export default function BattleArena() {
               'Sign in required',
               'Create an account or sign in to play online battles. Guest mode is offline only.',
               [
-                { text: 'Not now', style: 'cancel', onPress: () => router.back() },
+                { text: 'Not now', style: 'cancel', onPress: goBackOrHome },
                 { text: 'Sign in', onPress: () => router.replace('/login') },
               ],
             );
@@ -188,11 +191,19 @@ export default function BattleArena() {
   };
 
   const challenge = async (friend: PublicUser) => {
+    if (state.coins < stakeCoins) {
+      Alert.alert(
+        'Not enough coins',
+        `You need ${stakeCoins} coins to start this battle. Your balance is ${state.coins}.`,
+      );
+      return;
+    }
+
     try {
       setBusyId(friend.uid);
 
       const pick = pickRandomLevel(difficulty);
-      const room = await createBattleRoom({ friend, ...pick });
+      const room = await createBattleRoom({ friend, ...pick, stakeCoins });
 
       playBattleRequestSound(state.settings.sound).catch(() => {});
       openRoom(room);
@@ -204,6 +215,15 @@ export default function BattleArena() {
   };
 
   const accept = async (room: BattleRoom) => {
+    const roomStake = room.stakeCoins ?? DEFAULT_BATTLE_STAKE;
+    if (state.coins < roomStake) {
+      Alert.alert(
+        'Not enough coins',
+        `This battle needs ${roomStake} coins. Your balance is ${state.coins}.`,
+      );
+      return;
+    }
+
     try {
       setBusyId(room.id);
       await acceptBattleRoom(room);
@@ -309,7 +329,7 @@ export default function BattleArena() {
       setBusyId(room.id);
 
       const pick = pickRandomLevel((room.difficulty as DifficultyId) || difficulty);
-      const nextRoom = await createBattleRoom({ friend, ...pick });
+      const nextRoom = await createBattleRoom({ friend, ...pick, stakeCoins: room.stakeCoins ?? stakeCoins });
 
       openRoom(nextRoom);
     } catch (error: any) {
@@ -332,7 +352,7 @@ export default function BattleArena() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.heroTitle, { color: C.ink }]}>Choose difficulty first</Text>
             <Text style={[styles.heroSub, { color: C.muted }]}>
-              When you tap Battle, a random level is selected automatically and saved in the battle room.
+              Choose a coin stake, then tap Battle. Winner gets the same amount the loser loses.
             </Text>
           </View>
 
@@ -341,6 +361,45 @@ export default function BattleArena() {
               <Text style={styles.countText}>{counts}</Text>
             </View>
           ) : null}
+        </View>
+
+        <View style={[styles.stakePanel, { backgroundColor: C.surface, borderColor: C.divider }]}>
+          <View style={styles.stakeHeader}>
+            <View>
+              <Text style={[styles.stakeTitle, { color: C.ink }]}>Battle Coins</Text>
+              <Text style={[styles.stakeSub, { color: C.muted }]}>
+                Your balance: {state.coins.toLocaleString()} coins
+              </Text>
+            </View>
+            <View style={styles.stakeBadge}>
+              <Ionicons name="logo-bitcoin" size={14} color="#1A0845" />
+              <Text style={styles.stakeBadgeText}>{stakeCoins}</Text>
+            </View>
+          </View>
+
+          <View style={styles.stakeOptions}>
+            {BATTLE_STAKE_OPTIONS.map((amount) => {
+              const selected = amount === stakeCoins;
+              const affordable = state.coins >= amount;
+              return (
+                <AnimatedPressable
+                  key={amount}
+                  disabled={!affordable}
+                  onPress={() => setStakeCoins(amount)}
+                  style={[
+                    styles.stakeOption,
+                    { borderColor: C.divider },
+                    selected && styles.stakeOptionActive,
+                    !affordable && styles.stakeOptionDisabled,
+                  ]}
+                >
+                  <Text style={[styles.stakeOptionText, selected && styles.stakeOptionTextActive]}>
+                    {amount}
+                  </Text>
+                </AnimatedPressable>
+              );
+            })}
+          </View>
         </View>
 
         <View style={styles.diffGrid}>
@@ -382,18 +441,20 @@ export default function BattleArena() {
 
             <View style={{ flex: 1 }}>
               <Text style={[styles.cardTitle, { color: C.ink }]}>{friend.displayName}</Text>
-              <Text style={[styles.cardMeta, { color: C.muted }]}>Random {difficulty.toUpperCase()} Word Search</Text>
+              <Text style={[styles.cardMeta, { color: C.muted }]}>
+                Random {difficulty.toUpperCase()} • Stake {stakeCoins} coins
+              </Text>
             </View>
 
             <AnimatedPressable
-              disabled={busyId === friend.uid}
-              style={styles.battleBtn}
+              disabled={busyId === friend.uid || state.coins < stakeCoins}
+              style={[styles.battleBtn, state.coins < stakeCoins && styles.battleBtnDisabled]}
               onPress={() => challenge(friend)}
             >
               {busyId === friend.uid ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.battleText}>Battle</Text>
+                <Text style={styles.battleText}>{state.coins < stakeCoins ? 'Need Coins' : 'Battle'}</Text>
               )}
             </AnimatedPressable>
           </View>
@@ -491,6 +552,12 @@ function RoomCard({
           <Text style={[styles.cardMeta, { color: C.muted }]}>
             {room.categoryTitle} • {room.difficulty.toUpperCase()} • Lv {room.level}
           </Text>
+          <View style={styles.roomStakePill}>
+            <Ionicons name="logo-bitcoin" size={11} color="#FFD23F" />
+            <Text style={styles.roomStakeText}>
+              {room.stakeCoins ?? DEFAULT_BATTLE_STAKE} coin battle
+            </Text>
+          </View>
           <Text style={styles.status}>{room.status.replace('_', ' ').toUpperCase()}</Text>
         </View>
 
@@ -585,6 +652,85 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 11,
     marginTop: 2,
+  },
+
+  stakePanel: {
+    borderRadius: 24,
+    padding: 14,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    gap: 12,
+  },
+
+  stakeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  stakeTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+
+  stakeSub: {
+    color: 'rgba(255,255,255,0.68)',
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  stakeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFD23F',
+  },
+
+  stakeBadgeText: {
+    color: '#1A0845',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+
+  stakeOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+
+  stakeOption: {
+    minWidth: 58,
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+
+  stakeOptionActive: {
+    backgroundColor: '#FFD23F',
+    borderColor: '#FFD23F',
+  },
+
+  stakeOptionDisabled: {
+    opacity: 0.36,
+  },
+
+  stakeOptionText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 12,
+  },
+
+  stakeOptionTextActive: {
+    color: '#1A0845',
   },
 
   section: {
@@ -711,6 +857,26 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
+  roomStakePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,210,63,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,210,63,0.26)',
+    marginTop: 6,
+  },
+
+  roomStakeText: {
+    color: '#FFD23F',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
   battleBtn: {
     backgroundColor: '#FF7A00',
     borderRadius: 999,
@@ -718,6 +884,10 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     minWidth: 82,
     alignItems: 'center',
+  },
+
+  battleBtnDisabled: {
+    opacity: 0.55,
   },
 
   battleText: {

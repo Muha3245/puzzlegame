@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { XoxRoom } from '../lib/online';
+import { DEFAULT_BATTLE_STAKE } from '../lib/battleEconomy';
 
 interface Props {
   room: XoxRoom | null;
@@ -46,7 +47,8 @@ export function XoxNotificationModal({ room, onAccept, onReject, acceptBusy }: P
 
   if (!room) return null;
 
-  const sizeLabel = `${room.boardSize}×${room.boardSize}`;
+  const sizeLabel = `${room.boardSize}x${room.boardSize}`;
+  const stakeCoins = room.stakeCoins ?? DEFAULT_BATTLE_STAKE;
 
   const dismiss = () => {
     Animated.parallel([
@@ -81,7 +83,7 @@ export function XoxNotificationModal({ room, onAccept, onReject, acceptBusy }: P
           <Ionicons name="grid-outline" size={14} color="#8E6BFF" />
           <Text style={styles.detailText}>{sizeLabel} Board</Text>
           <View style={styles.dot} />
-          <Text style={styles.detailText}>You play as O</Text>
+          <Text style={styles.detailText}>+{stakeCoins} / -{stakeCoins}</Text>
         </View>
 
         {/* Buttons */}
@@ -193,3 +195,4 @@ const styles = StyleSheet.create({
   acceptText: { color: '#fff', fontSize: 15, fontWeight: '900' },
   btnBusy:   { opacity: 0.55 },
 });
+
