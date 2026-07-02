@@ -6,6 +6,7 @@ node_modules/
 # Expo
 .expo/
 dist/
+dist-*/
 web-build/
 expo-env.d.ts
 
@@ -35,6 +36,11 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+assets/play-store/
+hermes-*.log
+*.hbc
+.npm-cache/
+tmp-npm-cache/
 
 app-example
 
