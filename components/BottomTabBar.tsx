@@ -24,6 +24,7 @@ function BottomTabBar() {
       {TABS.map((tab) => {
         const active = pathname === tab.route || pathname.startsWith(`${tab.route}/`);
         const color  = active ? ACTIVE : INACTIVE;
+        const labelColor = active ? '#07102C' : INACTIVE;
 
         return (
           <View key={tab.route} style={styles.tabItem}>
@@ -39,7 +40,7 @@ function BottomTabBar() {
                   color={color}
                 />
               </View>
-              <Text style={[styles.label, { color }]} numberOfLines={1}>
+              <Text style={[styles.label, active && styles.labelActive, { color: labelColor }]} numberOfLines={1}>
                 {tab.label}
               </Text>
             </AnimatedPressable>
@@ -104,6 +105,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
     textAlign: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+
+  labelActive: {
+    backgroundColor: 'rgba(41,224,255,0.95)',
+    overflow: 'hidden',
+    textShadowColor: 'rgba(255,255,255,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });
 

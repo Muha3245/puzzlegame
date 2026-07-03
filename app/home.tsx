@@ -136,6 +136,7 @@ function StarDeco({ x, y, size, color, delay = 0 }: { x: number; y: number; size
 }
 
 // ─── Lollipop ─────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function Lollipop({ x, y, size, c1, c2, delay = 0 }: {
   x: number; y: number; size: number; c1: string; c2: string; delay?: number;
 }) {
@@ -291,6 +292,7 @@ function SparkleTrail() {
 }
 
 // ─── Pink clouds (bottom) ─────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function PinkClouds() {
   const tx = useRef(new Animated.Value(0)).current;
 
@@ -349,8 +351,6 @@ function Background() {
       <SparkleTrail />
 
       {/* ── Lollipops ── */}
-      <Lollipop x={SW * 0.58} y={SH * 0.04} size={120} c1="#FFB0CC" c2="#FFF0F5" delay={0} />
-      <Lollipop x={-46}       y={SH * 0.52} size={100} c1="#C898F8" c2="#F0D8FF" delay={1} />
 
       {/* ── Jelly beans ── */}
       <JellyBean x={SW * 0.02} y={SH * 0.36} color="#7EE858" rot={-30} delay={0} />
@@ -379,7 +379,6 @@ function Background() {
       <StarDeco x={SW * 0.30} y={SH * 0.44} size={13} color="#FFE060" delay={1.8} />
 
       {/* ── Pink fluffy clouds at bottom ── */}
-      <PinkClouds />
     </View>
   );
 }
@@ -400,23 +399,11 @@ function GameLogo() {
   return (
     <Animated.View style={[styles.logoWrap, { transform: [{ scale: sc }], opacity: op }]}>
       <View style={styles.logoGlow} />
-      <View style={styles.wordRushMark}>
-        <View style={styles.wordRushTileRow}>
-          {['W', 'O', 'R', 'D'].map((ch, i) => (
-            <View
-              key={`${ch}-${i}`}
-              style={[
-                styles.wordRushTile,
-                { backgroundColor: [C.blue, C.green, C.yellow, C.pink][i] },
-              ]}
-            >
-              <Text style={styles.wordRushTileText}>{ch}</Text>
-            </View>
-          ))}
-        </View>
-        <Text style={styles.wordRushText}>RUSH</Text>
-        <Text style={styles.wordRushArena}>ARENA</Text>
-      </View>
+      <ExpoImage
+        source={require('../assets/images/wordrush-arena-logo.png')}
+        style={styles.logoImage}
+        contentFit="contain"
+      />
     </Animated.View>
   );
 }
@@ -851,60 +838,17 @@ const styles = StyleSheet.create({
   },
   logoGlow: {
     position: 'absolute',
-    width: SW * 0.58,
-    height: 62,
-    borderRadius: 31,
+    width: SW * 0.7,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: '#29E0FF',
     opacity: 0.16,
     top: '50%',
-    marginTop: -16,
+    marginTop: -22,
   },
-  wordRushMark: {
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-  },
-  wordRushTileRow: {
-    flexDirection: 'row',
-    gap: 5,
-    marginBottom: -2,
-  },
-  wordRushTile: {
-    width: 31,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: 3,
-    borderBottomColor: 'rgba(0,0,0,0.28)',
-  },
-  wordRushTileText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '900',
-    textShadowColor: 'rgba(0,0,0,0.28)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  wordRushText: {
-    color: '#FFFFFF',
-    fontSize: 35,
-    fontWeight: '900',
-    letterSpacing: 0,
-    lineHeight: 38,
-    textShadowColor: 'rgba(41,224,255,0.80)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
-  },
-  wordRushArena: {
-    color: C.yellow,
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0,
-    marginTop: -2,
-    textShadowColor: 'rgba(255,210,63,0.70)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 7,
+  logoImage: {
+    width: Math.min(SW * 0.72, 310),
+    height: 92,
   },
   logoBox: { alignItems: 'center', gap: 4 },
   logoRow: { flexDirection: 'row', gap: 5, alignItems: 'flex-end' },

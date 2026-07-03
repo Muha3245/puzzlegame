@@ -27,6 +27,7 @@ import { playBattleRequestSound, playBattleStart } from '../lib/audio';
 import { BATTLE_STAKE_OPTIONS, DEFAULT_BATTLE_STAKE } from '../lib/battleEconomy';
 import { useAppState } from '../lib/storage';
 import { goBackOrHome } from '../lib/navigation';
+import { showOnlineErrorAlert } from '../lib/networkStatus';
 
 type DifficultyId = 'easy' | 'medium' | 'hard' | 'pro';
 
@@ -122,7 +123,7 @@ export default function BattleArena() {
       setFriends(friendRows);
       setRooms(roomRows);
     } catch (error: any) {
-      Alert.alert('Battle error', error?.message || 'Unable to load battles.');
+      showOnlineErrorAlert(error, 'Battle error', 'Unable to load battles.', goBackOrHome);
     } finally {
       setLoading(false);
     }
@@ -152,7 +153,10 @@ export default function BattleArena() {
           load();
           if (status.uid) unsub = subscribeToMyBattleList(status.uid, load);
         })
-        .catch(() => {});
+        .catch((error) => {
+          if (!active) return;
+          showOnlineErrorAlert(error, 'Battle error', 'Unable to check online battle access.', goBackOrHome);
+        });
 
       return () => {
         active = false;
@@ -208,7 +212,7 @@ export default function BattleArena() {
       playBattleRequestSound(state.settings.sound).catch(() => {});
       openRoom(room);
     } catch (error: any) {
-      Alert.alert('Challenge error', error?.message || 'Unable to send battle request.');
+      showOnlineErrorAlert(error, 'Challenge error', 'Unable to send battle request.');
     } finally {
       setBusyId(null);
     }
@@ -230,7 +234,7 @@ export default function BattleArena() {
       playBattleStart(state.settings.sound).catch(() => {});
       openRoom(room);
     } catch (error: any) {
-      Alert.alert('Accept error', error?.message || 'Unable to accept battle.');
+      showOnlineErrorAlert(error, 'Accept error', 'Unable to accept battle.');
     } finally {
       setBusyId(null);
     }
@@ -242,7 +246,7 @@ export default function BattleArena() {
       await rejectBattleRoom(room);
       await load();
     } catch (error: any) {
-      Alert.alert('Reject error', error?.message || 'Unable to reject battle.');
+      showOnlineErrorAlert(error, 'Reject error', 'Unable to reject battle.');
     } finally {
       setBusyId(null);
     }
@@ -267,7 +271,7 @@ export default function BattleArena() {
               await deleteRoomHard(room);
               await load();
             } catch (error: any) {
-              Alert.alert('Delete error', error?.message || 'Unable to delete this battle.');
+              showOnlineErrorAlert(error, 'Delete error', 'Unable to delete this battle.');
             } finally {
               setBusyId(null);
             }
@@ -301,7 +305,7 @@ export default function BattleArena() {
               await Promise.all(activeRooms.map((room) => deleteRoomHard(room).catch(() => null)));
               await load();
             } catch (error: any) {
-              Alert.alert('Delete error', error?.message || 'Unable to delete all active battles.');
+              showOnlineErrorAlert(error, 'Delete error', 'Unable to delete all active battles.');
             } finally {
               setDeletingAllActive(false);
               setBusyId(null);
@@ -333,7 +337,7 @@ export default function BattleArena() {
 
       openRoom(nextRoom);
     } catch (error: any) {
-      Alert.alert('Rematch error', error?.message || 'Unable to create rematch.');
+      showOnlineErrorAlert(error, 'Rematch error', 'Unable to create rematch.');
     } finally {
       setBusyId(null);
     }

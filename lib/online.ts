@@ -55,6 +55,7 @@ export type FriendRequest = {
   toUid: string;
   fromName: string;
   toName: string;
+  fromPhotoURL?: string | null;
   status: "pending" | "accepted" | "rejected";
   createdAt?: any;
 };
@@ -533,7 +534,7 @@ export async function getIncomingFriendRequests(): Promise<FriendRequest[]> {
 
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({
+  const requests = (data ?? []).map((row) => ({
     id: row.id,
     fromUid: row.from_uid,
     toUid: row.to_uid,
@@ -541,6 +542,20 @@ export async function getIncomingFriendRequests(): Promise<FriendRequest[]> {
     toName: row.to_name,
     status: row.status,
     createdAt: row.created_at,
+  }));
+
+  const senderIds = [...new Set(requests.map((request) => request.fromUid).filter(Boolean))];
+  if (senderIds.length === 0) return requests;
+
+  const { data: senders } = await supabase
+    .from("users")
+    .select("uid, photo_url")
+    .in("uid", senderIds);
+
+  const photosByUid = new Map((senders ?? []).map((row) => [row.uid, row.photo_url ?? null]));
+  return requests.map((request) => ({
+    ...request,
+    fromPhotoURL: photosByUid.get(request.fromUid) ?? null,
   }));
 }
 
@@ -658,19 +673,34 @@ export async function getMyFriends(): Promise<PublicUser[]> {
 
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({
-    id: row.friend_id,
-    uid: row.friend_id,
-    displayName: row.friend_name || "Friend",
-    email: null,
-    photoURL: null,
-    coins: 0,
-    totalScore: 0,
-    levelsCompleted: 0,
-    battlesWon: 0,
-    battlesLost: 0,
-    createdAt: row.created_at,
-  }));
+  const rows = data ?? [];
+  const friendIds = [...new Set(rows.map((row) => row.friend_id).filter(Boolean))];
+  const { data: profiles } = friendIds.length
+    ? await supabase
+        .from("users")
+        .select("uid, display_name, email, photo_url, coins, total_score, levels_completed, battles_won, battles_lost, created_at, updated_at")
+        .in("uid", friendIds)
+    : { data: [] };
+
+  const profilesByUid = new Map((profiles ?? []).map((profile) => [profile.uid, profile]));
+
+  return rows.map((row) => {
+    const profile = profilesByUid.get(row.friend_id);
+    return {
+      id: row.friend_id,
+      uid: row.friend_id,
+      displayName: profile?.display_name || row.friend_name || "Friend",
+      email: profile?.email ?? null,
+      photoURL: profile?.photo_url ?? null,
+      coins: profile?.coins ?? 0,
+      totalScore: profile?.total_score ?? 0,
+      levelsCompleted: profile?.levels_completed ?? 0,
+      battlesWon: profile?.battles_won ?? 0,
+      battlesLost: profile?.battles_lost ?? 0,
+      createdAt: row.created_at,
+      updatedAt: profile?.updated_at,
+    };
+  });
 }
 
 export async function removeFriend(friendUid: string) {

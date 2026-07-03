@@ -36,6 +36,34 @@ import { playTapSound } from '../lib/audio';
 import { goBackOrHome } from '../lib/navigation';
 import { getAppSettings } from '../lib/storage';
 
+function FriendAvatar({
+  photoURL,
+  name,
+  variant = 'default',
+}: {
+  photoURL?: string | null;
+  name?: string | null;
+  variant?: 'default' | 'orange' | 'green';
+}) {
+  const variantStyle =
+    variant === 'orange'
+      ? styles.cardAvatarOrange
+      : variant === 'green'
+        ? styles.cardAvatarGreen
+        : null;
+  const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+
+  return (
+    <View style={[styles.cardAvatar, variantStyle]}>
+      {photoURL ? (
+        <Image source={{ uri: photoURL }} style={styles.cardAvatarImage} contentFit="cover" />
+      ) : (
+        <Text style={styles.cardAvatarText}>{initial}</Text>
+      )}
+    </View>
+  );
+}
+
 export default function FriendsScreen() {
   const [search, setSearch] = useState('');
   const [players, setPlayers] = useState<PublicUser[]>([]);
@@ -229,9 +257,7 @@ export default function FriendsScreen() {
               return (
                 <AnimatedEntry delay={Math.min(index, 6) * 50}>
                 <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
-                  <View style={styles.cardAvatar}>
-                    <Text style={styles.cardAvatarText}>{req.fromName.charAt(0).toUpperCase()}</Text>
-                  </View>
+                  <FriendAvatar photoURL={req.fromPhotoURL} name={req.fromName} />
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.cardName, { color: C.ink }]}>{req.fromName}</Text>
                     <Text style={[styles.cardMeta, { color: C.muted }]}>wants to be your friend</Text>
@@ -252,9 +278,7 @@ export default function FriendsScreen() {
               return (
                 <AnimatedEntry delay={Math.min(index, 6) * 50}>
                 <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
-                  <View style={[styles.cardAvatar, styles.cardAvatarOrange]}>
-                    <Text style={styles.cardAvatarText}>{player.displayName.charAt(0).toUpperCase()}</Text>
-                  </View>
+                  <FriendAvatar photoURL={player.photoURL} name={player.displayName} variant="orange" />
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.cardName, { color: C.ink }]}>{player.displayName}</Text>
                     <Text style={[styles.cardMeta, { color: C.muted }]}>Score {(player.totalScore ?? 0).toLocaleString()}</Text>
@@ -273,11 +297,7 @@ export default function FriendsScreen() {
             return (
               <AnimatedEntry delay={Math.min(index, 6) * 50}>
               <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.divider }]}>
-                <View style={[styles.cardAvatar, styles.cardAvatarGreen]}>
-                  <Text style={styles.cardAvatarText}>
-                    {friend.displayName?.charAt(0)?.toUpperCase() ?? '?'}
-                  </Text>
-                </View>
+                <FriendAvatar photoURL={friend.photoURL} name={friend.displayName} variant="green" />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.cardName, { color: C.ink }]}>{friend.displayName}</Text>
                   <View style={styles.friendStatusRow}>
@@ -337,6 +357,7 @@ const styles = StyleSheet.create({
   // Cards
   card: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, padding: 14, borderWidth: 1 },
   cardAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+  cardAvatarImage: { width: 44, height: 44, borderRadius: 22 },
   cardAvatarOrange: { backgroundColor: 'rgba(255,120,0,0.22)' },
   cardAvatarGreen: { backgroundColor: 'rgba(76,195,138,0.2)' },
   cardAvatarText: { color: '#fff', fontWeight: '900', fontSize: 18 },

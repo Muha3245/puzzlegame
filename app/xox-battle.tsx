@@ -31,6 +31,7 @@ import {
 } from '../lib/online';
 import { goBackOrHome } from '../lib/navigation';
 import { useAppState } from '../lib/storage';
+import { showOnlineErrorAlert } from '../lib/networkStatus';
 
 const BOARD_SIZES: { size: 3; label: string; sub: string; color: string }[] = [
   { size: 3, label: '3 × 3', sub: 'Classic',  color: '#4CC38A' },
@@ -69,7 +70,7 @@ export default function XoxBattleScreen() {
       setFriends(friendRows);
       setRooms(roomRows);
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not load XOX games.');
+      showOnlineErrorAlert(e, 'Error', 'Could not load XOX games.', goBackOrHome);
     } finally {
       setLoading(false);
     }
@@ -99,7 +100,10 @@ export default function XoxBattleScreen() {
           load();
           if (status.uid) unsub = subscribeToMyXoxList(status.uid, load);
         })
-        .catch(() => {});
+        .catch((e) => {
+          if (!active) return;
+          showOnlineErrorAlert(e, 'Error', 'Could not check online XOX access.', goBackOrHome);
+        });
 
       return () => {
         active = false;
@@ -126,7 +130,7 @@ export default function XoxBattleScreen() {
       const room = await createXoxRoom({ friend, boardSize, stakeCoins });
       openRoom(room);
     } catch (e: any) {
-      Alert.alert('Challenge error', e?.message || 'Could not send challenge.');
+      showOnlineErrorAlert(e, 'Challenge error', 'Could not send challenge.');
     } finally {
       setBusyId(null);
     }
@@ -147,7 +151,7 @@ export default function XoxBattleScreen() {
       const accepted = await acceptXoxRoom(room);
       openRoom(accepted);
     } catch (e: any) {
-      Alert.alert('Accept error', e?.message || 'Could not accept challenge.');
+      showOnlineErrorAlert(e, 'Accept error', 'Could not accept challenge.');
     } finally {
       setBusyId(null);
     }
@@ -159,7 +163,7 @@ export default function XoxBattleScreen() {
       await rejectXoxRoom(room);
       await load();
     } catch (e: any) {
-      Alert.alert('Decline error', e?.message || 'Could not decline challenge.');
+      showOnlineErrorAlert(e, 'Decline error', 'Could not decline challenge.');
     } finally {
       setBusyId(null);
     }
